@@ -5,8 +5,9 @@ help:
 	@echo "  clean       - Remove virtual environment"
 	@echo "  reinstall   - Clean and reinstall everything"
 	@echo "  run         - Activate venv and run kairo CLI"
-	@echo "  test        - Run tests (placeholder)"
-	@echo "  lint        - Run linters (placeholder)"
+	@echo "  test        - Run tests with pytest"
+	@echo "  test-cov    - Run tests with coverage"
+	@echo "  lint        - Run linters (black and isort)"
 
 PHONY: setup
 setup:
@@ -30,7 +31,12 @@ reinstall: clean setup
 PHONY: test
 test:
 	@echo "Running tests..."
-	. venv/bin/activate && python -m pytest tests/ -v
+	. venv/bin/activate && python -m pytest tests/ -v --tb=short
+
+PHONY: test-cov
+test-cov:
+	@echo "Running tests with coverage..."
+	. venv/bin/activate && python -m pytest tests/ -v --cov=kairo --cov-report=term-missing
 
 PHONY: lint
 lint:
