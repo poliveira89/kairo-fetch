@@ -1,16 +1,21 @@
 """Storage management for email-fetch."""
 
 import json
-import os
 from pathlib import Path
-from typing import Any, Dict
+from typing import TypedDict
+
+
+class IndexData(TypedDict):
+    """Type for index data."""
+
+    folders: dict[str, object]
 
 
 class StorageManager:
     """Handles email and attachment storage."""
 
     def __init__(self, base_path: str):
-        self.base_path = Path(base_path)
+        self.base_path: Path = Path(base_path)
         self.base_path.mkdir(parents=True, exist_ok=True)
 
     def get_account_path(self, account_name: str) -> Path:
@@ -42,7 +47,7 @@ class StorageManager:
         account_path = self.get_account_path(account_name)
         return account_path / "index.json"
 
-    def load_index(self, account_name: str) -> Dict[str, Any]:
+    def load_index(self, account_name: str) -> IndexData | dict[str, object]:
         """Load index for account."""
         index_path = self.get_index_path(account_name)
         try:
@@ -51,7 +56,7 @@ class StorageManager:
         except (FileNotFoundError, json.JSONDecodeError):
             return {"folders": {}}
 
-    def save_index(self, account_name: str, index_data: Dict[str, Any]):
+    def save_index(self, account_name: str, index_data: IndexData) -> None:
         """Save index for account."""
         index_path = self.get_index_path(account_name)
         with open(index_path, "w") as f:
@@ -67,5 +72,5 @@ class StorageManager:
         # Ensure it's not empty
         return sanitized if sanitized else "attachment"
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"StorageManager(base_path={self.base_path})"

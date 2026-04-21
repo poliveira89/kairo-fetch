@@ -1,5 +1,4 @@
 """Tests for configuration module."""
-import pytest
 
 from kairo.config import Config
 

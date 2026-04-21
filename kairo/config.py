@@ -2,15 +2,38 @@
 
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import TypedDict
+
+
+class AccountConfig(TypedDict):
+    """Type for account configuration."""
+
+    provider: str
+    username: str
+    password: str
+    server: str | None
+    port: int
+
+
+class StorageConfig(TypedDict):
+    """Type for storage configuration."""
+
+    path: str
+
+
+class ConfigData(TypedDict):
+    """Type for configuration data."""
+
+    accounts: dict[str, AccountConfig]
+    storage: StorageConfig
 
 
 class Config:
     """Configuration manager for email-fetch tool."""
 
-    def __init__(self, config_path: str = None):
-        self.config_path = config_path or self._get_default_config_path()
-        self.data = self._load_config()
+    def __init__(self, config_path: str | None = None):
+        self.config_path: str = config_path or str(self._get_default_config_path())
+        self.data: ConfigData = self._load_config()
 
     def _get_default_config_path(self) -> Path:
         """Get default configuration file path."""
@@ -18,7 +41,7 @@ class Config:
         config_dir.mkdir(exist_ok=True)
         return config_dir / "config.json"
 
-    def _load_config(self) -> Dict[str, Any]:
+    def _load_config(self) -> ConfigData:
         """Load configuration from file."""
         try:
             with open(self.config_path, "r") as f:
@@ -27,16 +50,16 @@ class Config:
             # Return default empty config
             return {"accounts": {}, "storage": {"path": str(Path.cwd() / "storage")}}
 
-    def save(self):
+    def save(self) -> None:
         """Save configuration to file."""
         with open(self.config_path, "w") as f:
             json.dump(self.data, f, indent=2)
 
-    def get_account(self, account_name: str) -> Dict[str, Any]:
+    def get_account(self, account_name: str) -> AccountConfig | dict[str, object]:
         """Get account configuration."""
         return self.data.get("accounts", {}).get(account_name, {})
 
-    def set_account(self, account_name: str, account_data: Dict[str, Any]):
+    def set_account(self, account_name: str, account_data: AccountConfig) -> None:
         """Set account configuration."""
         if "accounts" not in self.data:
             self.data["accounts"] = {}
@@ -46,5 +69,5 @@ class Config:
         """Get storage path."""
         return self.data.get("storage", {}).get("path", str(Path.cwd() / "storage"))
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"Config(config_path={self.config_path}, accounts={list(self.data.get('accounts', {}).keys())})"

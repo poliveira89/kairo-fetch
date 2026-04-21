@@ -1,7 +1,5 @@
 """Data models for email-fetch."""
 
-from typing import Any, Dict, List
-
 from pydantic import BaseModel
 
 
@@ -11,7 +9,7 @@ class EmailAccount(BaseModel):
     provider: str  # 'gmail' or 'imap'
     username: str
     password: str  # In real usage, consider more secure storage
-    server: str = None  # For IMAP
+    server: str | None = None  # For IMAP
     port: int = 993  # For IMAP
 
 
@@ -20,11 +18,11 @@ class EmailMetadata(BaseModel):
 
     email_id: str
     from_address: str
-    to_addresses: List[str]
+    to_addresses: list[str]
     subject: str
     date: str
     folder: str
-    attachments: List[str] = []
+    attachments: list[str] = []
     has_attachments: bool = False
 
 

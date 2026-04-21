@@ -7,7 +7,7 @@ from .config import Config
 
 @click.group()
 @click.pass_context
-def cli(ctx):
+def cli(ctx: click.Context) -> None:
     """Email Fetch - Retrieve emails from Gmail and IMAP providers."""
     ctx.ensure_object(dict)
     ctx.obj["config"] = Config()
@@ -25,7 +25,14 @@ def cli(ctx):
 @click.option("--server", help="IMAP server address (required for IMAP)")
 @click.option("--port", type=int, default=993, help="IMAP server port")
 @click.pass_context
-def fetch(ctx, provider, account, folder, server, port):
+def fetch(
+    ctx: click.Context,
+    provider: str,
+    account: str,
+    folder: str,
+    server: str | None,
+    port: int,
+) -> None:
     """Fetch emails from specified provider and folder."""
     config = ctx.obj["config"]
     click.echo(f"Fetching emails from {provider} account '{account}' folder '{folder}'")
@@ -43,7 +50,7 @@ def fetch(ctx, provider, account, folder, server, port):
 @click.option("--account", required=True, help="Account name to search")
 @click.option("--query", required=True, help='Search query (e.g., "from:john")')
 @click.pass_context
-def search(ctx, account, query):
+def search(ctx: click.Context, account: str, query: str) -> None:
     """Search emails in index."""
     config = ctx.obj["config"]
     click.echo(f"Searching account '{account}' for query: {query}")
@@ -53,7 +60,7 @@ def search(ctx, account, query):
 
 @cli.command()
 @click.pass_context
-def list_accounts(ctx):
+def list_accounts(ctx: click.Context) -> None:
     """List configured accounts."""
     config = ctx.obj["config"]
     click.echo("List of configured accounts:")
