@@ -8,6 +8,7 @@ help:
 	@echo "  test        - Run tests with pytest"
 	@echo "  test-cov    - Run tests with coverage"
 	@echo "  lint        - Run linters (black and isort)"
+	@echo "  format      - Format code (black and isort)"
 
 PHONY: setup
 setup:
@@ -43,6 +44,12 @@ lint:
 	@echo "Running linters..."
 	. venv/bin/activate && black --check .
 	. venv/bin/activate && isort --check .
+
+PHONY: format
+format:
+	@echo "Formatting code..."
+	. venv/bin/activate && black .
+	. venv/bin/activate && isort .
 
 PHONY: run
 run:

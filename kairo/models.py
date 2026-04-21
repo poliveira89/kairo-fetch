@@ -1,11 +1,13 @@
 """Data models for email-fetch."""
 
-from typing import List, Dict, Any
+from typing import Any, Dict, List
+
 from pydantic import BaseModel
 
 
 class EmailAccount(BaseModel):
     """Email account configuration."""
+
     provider: str  # 'gmail' or 'imap'
     username: str
     password: str  # In real usage, consider more secure storage
@@ -15,6 +17,7 @@ class EmailAccount(BaseModel):
 
 class EmailMetadata(BaseModel):
     """Email metadata for indexing."""
+
     email_id: str
     from_address: str
     to_addresses: List[str]
@@ -27,5 +30,6 @@ class EmailMetadata(BaseModel):
 
 class StorageConfig(BaseModel):
     """Storage configuration."""
+
     path: str
     structure: str = "flat"  # 'flat' or 'hierarchical'
