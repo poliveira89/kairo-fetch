@@ -2,13 +2,13 @@
 
 import json
 from pathlib import Path
-from typing import TypedDict
+from typing import TypedDict, Any
 
 
 class IndexData(TypedDict):
     """Type for index data."""
 
-    folders: dict[str, object]
+    folders: dict[str, list[dict[str, Any]]]
 
 
 class StorageManager:
