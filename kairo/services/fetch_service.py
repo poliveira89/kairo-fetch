@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Tuple
 
 import click
 
-from ..config import Config, AccountConfig
+from ..config import AccountConfig, Config
 from ..retrievers.gmail import GmailRetriever
 from ..storage import StorageManager
 

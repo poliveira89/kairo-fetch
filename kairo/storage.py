@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from typing import TypedDict, Any
+from typing import Any, TypedDict
 
 
 class IndexData(TypedDict):
