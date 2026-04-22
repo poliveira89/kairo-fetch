@@ -1,4 +1,4 @@
-# Email Fetch CLI
+# kairo-fetch
 
 A simple CLI tool for fetching emails from Gmail and IMAP providers.
 

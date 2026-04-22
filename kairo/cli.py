@@ -124,7 +124,7 @@ def fetch(
                     }
                 )
 
-                click.echo(f"1. Visit this URL to authorize:")
+                click.echo("1. Visit this URL to authorize:")
                 click.echo(f"   {auth_url}")
 
                 # Step 2: Get authorization code
