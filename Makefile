@@ -7,8 +7,9 @@ help:
 	@echo "  run         - Activate venv and run kairo CLI"
 	@echo "  test        - Run tests with pytest"
 	@echo "  test-cov    - Run tests with coverage"
-	@echo "  lint        - Run linters (black, isort, and basedpyright)"
+	@echo "  lint        - Run linters (black and isort)"
 	@echo "  format      - Format code (black and isort)"
+	@echo "  check       - Review syntax errors (basedpyright)"
 
 PHONY: setup
 setup:
