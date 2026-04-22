@@ -3,10 +3,10 @@
 import click
 
 from .config import Config
-from .services.fetch_service import FetchService
-from .services.search_service import SearchService
 from .services.accounts_service import AccountsService
+from .services.fetch_service import FetchService
 from .services.init_service import InitService
+from .services.search_service import SearchService
 
 
 @click.group()

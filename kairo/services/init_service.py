@@ -1,7 +1,8 @@
 """Init service for initialization operations."""
 
-import click
 from pathlib import Path
+
+import click
 
 
 class InitService:

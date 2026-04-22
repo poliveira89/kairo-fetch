@@ -71,7 +71,9 @@ class Config:
 
     def get_storage_path(self) -> str:
         """Get storage path."""
-        return self.data.get("storage", {}).get("path", str(Path.home() / ".kairo" / "storage"))
+        return self.data.get("storage", {}).get(
+            "path", str(Path.home() / ".kairo" / "storage")
+        )
 
     def __repr__(self) -> str:
         return f"Config(config_path={self.config_path}, accounts={list(self.data.get('accounts', {}).keys())})"

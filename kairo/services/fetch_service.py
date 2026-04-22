@@ -1,9 +1,10 @@
 """Fetch service for email retrieval operations."""
 
-import click
 from typing import Any, Dict, List, Tuple
 
-from ..config import Config
+import click
+
+from ..config import Config, AccountConfig
 from ..retrievers.gmail import GmailRetriever
 from ..storage import StorageManager
 
@@ -23,7 +24,7 @@ class FetchService:
 
     def find_account_config(
         self, provider: str, account: str | None
-    ) -> Tuple[str | None, Dict[str, Any] | None]:
+    ) -> Tuple[str | None, AccountConfig | dict[str, object] | None]:
         """Find account configuration based on provider and account name."""
         if account:
             # Specific account requested
@@ -119,9 +120,7 @@ class FetchService:
             }
 
             try:
-                token_request = Request(
-                    token_url, data=urlencode(token_data).encode()
-                )
+                token_request = Request(token_url, data=urlencode(token_data).encode())
                 token_response = urlopen(token_request).read().decode()
                 token_data = json.loads(token_response)
                 access_token = token_data["access_token"]
@@ -136,9 +135,7 @@ class FetchService:
                 self.config.set_account(account, account_config)
                 self.config.save()
 
-                return GmailRetriever(
-                    username=username, access_token=access_token
-                )
+                return GmailRetriever(username=username, access_token=access_token)
 
             except Exception as e:
                 click.echo(f"❌ OAuth2 authentication failed: {e}", err=True)
@@ -181,12 +178,16 @@ class FetchService:
         try:
             if provider == "gmail":
                 # Handle Gmail authentication
-                retriever = self.handle_gmail_authentication(account_name, account_config)
+                retriever = self.handle_gmail_authentication(
+                    account_name, account_config
+                )
                 if not retriever:
                     return
 
                 # Fetch emails
-                click.echo(f"Connecting to Gmail for account: {account_config.get('username')}")
+                click.echo(
+                    f"Connecting to Gmail for account: {account_config.get('username')}"
+                )
                 emails = retriever.fetch_emails(folder=folder.upper(), limit=limit)
 
                 click.echo(f"Successfully fetched {len(emails)} emails")
