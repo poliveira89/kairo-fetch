@@ -68,5 +68,23 @@ def list_accounts(ctx: click.Context) -> None:
     click.echo("Feature not yet implemented. This is the basic CLI structure.")
 
 
+@cli.command()
+def init() -> None:
+    """Initialize the kairo configuration and storage directories."""
+    from pathlib import Path
+
+    # Create .kairo directory in the user's home directory
+    kairo_dir = Path.home() / ".kairo"
+    kairo_dir.mkdir(exist_ok=True)
+
+    # Create storage directory
+    storage_dir = kairo_dir / "storage"
+    storage_dir.mkdir(exist_ok=True)
+
+    click.echo(
+        f"Initialized kairo configuration and storage directories at {kairo_dir}"
+    )
+
+
 if __name__ == "__main__":
     cli()
