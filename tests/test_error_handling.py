@@ -26,7 +26,7 @@ def test_config_file_not_found():
         assert config.config_path == str(config_path)
         assert config.data == {
             "accounts": {},
-            "storage": {"path": str(Path.cwd() / "storage")},
+            "storage": {"path": str(Path.home() / ".kairo" / "storage")},
         }
 
 
@@ -42,7 +42,7 @@ def test_config_file_invalid_json():
         # Should return default config
         assert config.data == {
             "accounts": {},
-            "storage": {"path": str(Path.cwd() / "storage")},
+            "storage": {"path": str(Path.home() / ".kairo" / "storage")},
         }
     finally:
         os.unlink(config_file)

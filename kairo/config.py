@@ -50,8 +50,9 @@ class Config:
             with open(self.config_path, "r") as f:
                 return json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
-            # Return default empty config
-            return {"accounts": {}, "storage": {"path": str(Path.cwd() / "storage")}}
+            # Return default empty config with proper storage path
+            default_storage_path = str(Path.home() / ".kairo" / "storage")
+            return {"accounts": {}, "storage": {"path": default_storage_path}}
 
     def save(self) -> None:
         """Save configuration to file."""
@@ -70,7 +71,7 @@ class Config:
 
     def get_storage_path(self) -> str:
         """Get storage path."""
-        return self.data.get("storage", {}).get("path", str(Path.cwd() / "storage"))
+        return self.data.get("storage", {}).get("path", str(Path.home() / ".kairo" / "storage"))
 
     def __repr__(self) -> str:
         return f"Config(config_path={self.config_path}, accounts={list(self.data.get('accounts', {}).keys())})"
