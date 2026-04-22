@@ -10,7 +10,10 @@ class AccountConfig(TypedDict):
 
     provider: str
     username: str
-    password: str
+    password: str | None
+    access_token: str | None
+    client_id: str | None
+    client_secret: str | None
     server: str | None
     port: int
 
@@ -37,7 +40,7 @@ class Config:
 
     def _get_default_config_path(self) -> Path:
         """Get default configuration file path."""
-        config_dir = Path.home() / ".email_fetch"
+        config_dir = Path.home() / ".kairo"
         config_dir.mkdir(exist_ok=True)
         return config_dir / "config.json"
 

@@ -8,7 +8,10 @@ class EmailAccount(BaseModel):
 
     provider: str  # 'gmail' or 'imap'
     username: str
-    password: str  # In real usage, consider more secure storage
+    password: str | None = None  # For basic auth
+    access_token: str | None = None  # For OAuth2
+    client_id: str | None = None  # For OAuth2 client credentials
+    client_secret: str | None = None  # For OAuth2 client credentials
     server: str | None = None  # For IMAP
     port: int = 993  # For IMAP
 
