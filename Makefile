@@ -44,13 +44,17 @@ lint:
 	@echo "Running linters..."
 	. venv/bin/activate && black --check .
 	. venv/bin/activate && isort --check .
-	. venv/bin/activate && basedpyright .
 
 PHONY: format
 format:
 	@echo "Formatting code..."
 	. venv/bin/activate && black .
 	. venv/bin/activate && isort .
+
+PHONY: check
+check:
+	@echo "Review code..."
+	. venv/bin/activate && basedpyright .
 
 PHONY: run
 run:
