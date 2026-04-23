@@ -52,7 +52,7 @@ tests/                 # Test suite
 - Write tests first, then implementation
 - Tests must cover both success and failure cases
 - Focus on edge cases and error conditions
-- Maintain high test coverage (>90%)
+- Maintain high test coverage (100%)
 
 ### 2. Code Organization
 
@@ -137,7 +137,6 @@ def search(ctx: click.Context, account: str) -> None:
 - Required parameters marked explicitly
 - Help text for all options
 - Context passed for shared state
-- %%CLI%%
 
 ## Testing Strategy
 
@@ -297,7 +296,7 @@ def fetch_emails(folder: str, limit: int) -> list[EmailMetadata]:
 ## Code Quality Standards
 
 - **Type Safety**: 100% type hints
-- **Test Coverage**: >90% minimum
+- **Test Coverage**: 100% minimum
 - **Documentation**: Focus on "why" not "what"
 - **Consistency**: Follow existing patterns
 - **Simplicity**: Prefer simple solutions

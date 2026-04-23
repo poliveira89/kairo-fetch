@@ -184,6 +184,7 @@ def test_storage_with_metadata():
             folder="inbox",
             attachments=["document.pdf"],
             has_attachments=True,
+            processed=False,
         )
 
         # Test saving and loading metadata
@@ -195,6 +196,41 @@ def test_storage_with_metadata():
         assert loaded_index["folders"]["inbox"][0]["email_id"] == "test123"
         assert loaded_index["folders"]["inbox"][0]["subject"] == "Test Subject"
         assert loaded_index["folders"]["inbox"][0]["has_attachments"] is True
+        assert loaded_index["folders"]["inbox"][0]["processed"] is False
+
+
+def test_is_email_processed():
+    """Test checking if email is processed."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        storage = StorageManager(temp_dir)
+
+        # Create test index with processed and unprocessed emails
+        test_index = {
+            "folders": {
+                "inbox": [
+                    {
+                        "email_id": "123",
+                        "subject": "Processed Email",
+                        "from_address": "test@example.com",
+                        "processed": True,
+                    },
+                    {
+                        "email_id": "456",
+                        "subject": "Unprocessed Email",
+                        "from_address": "test@example.com",
+                        "processed": False,
+                    },
+                ]
+            }
+        }
+
+        storage.save_index("test_account", test_index)  # type: ignore[arg-type]
+
+        # Test checking processed status
+        assert storage.is_email_processed("test_account", "inbox", "123") is True
+        assert storage.is_email_processed("test_account", "inbox", "456") is False
+        assert storage.is_email_processed("test_account", "inbox", "999") is False
+        assert storage.is_email_processed("test_account", "sent", "123") is False
 
 
 def test_email_storage_and_retrieval():

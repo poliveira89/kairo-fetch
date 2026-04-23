@@ -27,6 +27,7 @@ class EmailMetadata(BaseModel):
     folder: str
     attachments: list[str] = []
     has_attachments: bool = False
+    processed: bool = False
 
 
 class StorageConfig(BaseModel):

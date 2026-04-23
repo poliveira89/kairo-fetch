@@ -195,14 +195,25 @@ class FetchService:
                 # Store emails
                 storage = StorageManager(self.config.get_storage_path())
                 for email_data in emails:
-                    # Save raw email
+                    email_id = str(email_data["email_id"])
+
+                    # Check if email is already processed
+                    is_processed = storage.is_email_processed(
+                        str(account_name), str(folder), email_id
+                    )
+
+                    if is_processed:
+                        click.echo(f"  Skipping already processed email ID: {email_id}")
+                        continue
+
+                    # Save raw email (overwrite if exists - this is the tradeoff)
                     email_path = storage.get_email_path(
-                        str(account_name), str(folder), str(email_data["email_id"])
+                        str(account_name), str(folder), email_id
                     )
                     with open(email_path, "w") as f:
                         f.write(email_data["raw"])
 
-                    # Update index
+                    # Update index but don't mark as processed yet
                     index = storage.load_index(str(account_name))
                     # Simple index update - just use the loaded index directly
                     # Type checking is complex here but the logic is sound
@@ -213,13 +224,37 @@ class FetchService:
                         index_dict["folders"][folder] = []  # type: ignore[index]
 
                     metadata = retriever.get_email_metadata(email_data)
-                    index_dict["folders"][folder].append(metadata.dict())  # type: ignore[attr-defined]
+                    # Set processed=False initially
+                    metadata_dict = metadata.dict()
+                    metadata_dict["processed"] = False
+
+                    # Check if email already exists in index (partial processing case)
+                    existing_emails = index_dict["folders"][folder]  # type: ignore[index]
+                    email_already_in_index = False
+                    for i, existing_email in enumerate(existing_emails):
+                        if existing_email.get("email_id") == email_id:
+                            # Overwrite existing entry (tradeoff: force overwrite)
+                            existing_emails[i] = metadata_dict
+                            email_already_in_index = True
+                            break
+
+                    if not email_already_in_index:
+                        existing_emails.append(metadata_dict)
+
                     storage.save_index(str(account_name), index_dict)  # type: ignore[arg-type]
 
                     click.echo(
-                        f"  Saved email: {email_data['subject']} (ID: {email_data['email_id']})"
+                        f"  Saved email: {email_data['subject']} (ID: {email_id})"
                     )
 
+                    # Mark this email as processed immediately after successful processing
+                    index = storage.load_index(str(account_name))
+                    if "folders" in index and folder in index["folders"]:
+                        for email_metadata in index["folders"][folder]:
+                            if email_metadata.get("email_id") == email_id:
+                                email_metadata["processed"] = True
+                                break
+                    storage.save_index(str(account_name), index)  # type: ignore[arg-type]
             elif provider == "imap":
                 # TODO: Implement IMAP retrieval
                 click.echo("IMAP provider not yet implemented")

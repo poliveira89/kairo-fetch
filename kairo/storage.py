@@ -31,6 +31,18 @@ class StorageManager:
         folder_path.mkdir(parents=True, exist_ok=True)
         return folder_path / f"{email_id}.eml"
 
+    def is_email_processed(self, account_name: str, folder: str, email_id: str) -> bool:
+        """Check if email is marked as processed in index."""
+        index = self.load_index(account_name)
+        if "folders" not in index:
+            return False
+
+        folder_emails = index["folders"].get(folder, [])
+        for email_metadata in folder_emails:
+            if email_metadata.get("email_id") == email_id:
+                return email_metadata.get("processed", False)
+        return False
+
     def get_attachment_path(
         self, account_name: str, attachment_id: str, original_filename: str
     ) -> Path:

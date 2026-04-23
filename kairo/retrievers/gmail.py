@@ -163,4 +163,5 @@ class GmailRetriever:
             folder=email_data["folder"],
             attachments=email_data["attachments"],
             has_attachments=email_data["has_attachments"],
+            processed=False,
         )
