@@ -47,12 +47,12 @@ class StorageManager:
         account_path = self.get_account_path(account_name)
         return account_path / "index.json"
 
-    def load_index(self, account_name: str) -> IndexData | dict[str, object]:
+    def load_index(self, account_name: str) -> IndexData:
         """Load index for account."""
         index_path = self.get_index_path(account_name)
         try:
             with open(index_path, "r") as f:
-                return json.load(f)
+                return json.load(f)  # type: ignore[return-value]
         except (FileNotFoundError, json.JSONDecodeError):
             return {"folders": {}}
 

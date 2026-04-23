@@ -38,7 +38,7 @@ class FetchService:
         else:
             # Find first account matching the provider
             accounts = self.config.data.get("accounts", {})
-            matching_accounts: List[Tuple[str, Dict[str, Any]]] = []
+            matching_accounts: List[Tuple[str, AccountConfig | dict[str, object]]] = []
 
             for name, acc in accounts.items():
                 # Match by provider field OR by account name matching provider
@@ -132,7 +132,7 @@ class FetchService:
                 account_config["access_token"] = access_token
                 if refresh_token:
                     account_config["refresh_token"] = refresh_token
-                self.config.set_account(account, account_config)
+                self.config.set_account(account, account_config)  # type: ignore[arg-type]
                 self.config.save()
 
                 return GmailRetriever(username=username, access_token=access_token)
@@ -179,7 +179,7 @@ class FetchService:
             if provider == "gmail":
                 # Handle Gmail authentication
                 retriever = self.handle_gmail_authentication(
-                    account_name, account_config
+                    account_name, account_config  # type: ignore[arg-type]
                 )
                 if not retriever:
                     return

@@ -132,7 +132,7 @@ def test_save_index():
         }
 
         # Save the index
-        storage.save_index("test_account", test_index)
+        storage.save_index("test_account", test_index)  # type: ignore[arg-type]  # type: ignore[arg-type]
 
         # Verify it was saved
         index_path = storage.get_index_path("test_account")
@@ -189,7 +189,7 @@ def test_storage_with_metadata():
         # Test saving and loading metadata
         test_index = {"folders": {"inbox": [metadata.dict()]}}
 
-        storage.save_index("test_account", test_index)
+        storage.save_index("test_account", test_index)  # type: ignore[arg-type]
         loaded_index = storage.load_index("test_account")
 
         assert loaded_index["folders"]["inbox"][0]["email_id"] == "test123"
