@@ -411,6 +411,7 @@ def test_oauth2_flow_success(mock_config_path, _, mock_urlopen):
         # Verify token was saved to config
         config = Config(config_file)
         account_config = config.get_account("test_account")
+        assert account_config is not None
         assert account_config["access_token"] == "test_access_token"
         assert account_config["refresh_token"] == "test_refresh_token"  # type: ignore[index]
 

@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 
 from kairo.models import EmailMetadata
-from kairo.storage import StorageManager
+from kairo.storage import IndexManager, StorageManager
 
 
 def test_storage_manager_initialization():
@@ -74,12 +74,11 @@ def test_load_index_empty():
     with tempfile.TemporaryDirectory() as temp_dir:
         storage = StorageManager(temp_dir)
 
-        index = storage.load_index("test_account")
+        index_manager = storage.load_index("test_account")
 
         # Should return default empty index
-        assert isinstance(index, dict)
-        assert "folders" in index
-        assert index["folders"] == {}
+        assert isinstance(index_manager, IndexManager)
+        assert index_manager.to_dict() == {"folders": {}}
 
 
 def test_load_index_existing():
@@ -107,10 +106,14 @@ def test_load_index_existing():
             json.dump(test_index, f)
 
         # Load the index
-        loaded_index = storage.load_index("test_account")
+        loaded_index_manager = storage.load_index("test_account")
 
-        assert loaded_index == test_index
-        assert loaded_index["folders"]["inbox"][0]["subject"] == "Test Email"
+        assert isinstance(loaded_index_manager, IndexManager)
+        assert loaded_index_manager.to_dict() == test_index
+        assert (
+            loaded_index_manager.to_dict()["folders"]["inbox"][0]["subject"]
+            == "Test Email"
+        )
 
 
 def test_save_index():
@@ -119,7 +122,7 @@ def test_save_index():
         storage = StorageManager(temp_dir)
 
         # Create test index data
-        test_index = {
+        test_index_dict = {
             "folders": {
                 "inbox": [
                     {
@@ -130,9 +133,10 @@ def test_save_index():
                 ]
             }
         }
+        test_index_manager = IndexManager.load_from_dict(test_index_dict)
 
         # Save the index
-        storage.save_index("test_account", test_index)  # type: ignore[arg-type]  # type: ignore[arg-type]
+        storage.save_index("test_account", test_index_manager)
 
         # Verify it was saved
         index_path = storage.get_index_path("test_account")
@@ -144,7 +148,7 @@ def test_save_index():
         with open(index_path, "r") as f:
             saved_index = json.load(f)
 
-        assert saved_index == test_index
+        assert saved_index == test_index_dict
 
 
 def test_sanitize_filename():
@@ -188,15 +192,27 @@ def test_storage_with_metadata():
         )
 
         # Test saving and loading metadata
-        test_index = {"folders": {"inbox": [metadata.dict()]}}
+        test_index_dict = {"folders": {"inbox": [metadata.dict()]}}
+        test_index_manager = IndexManager.load_from_dict(test_index_dict)
 
-        storage.save_index("test_account", test_index)  # type: ignore[arg-type]
-        loaded_index = storage.load_index("test_account")
+        storage.save_index("test_account", test_index_manager)
+        loaded_index_manager = storage.load_index("test_account")
 
-        assert loaded_index["folders"]["inbox"][0]["email_id"] == "test123"
-        assert loaded_index["folders"]["inbox"][0]["subject"] == "Test Subject"
-        assert loaded_index["folders"]["inbox"][0]["has_attachments"] is True
-        assert loaded_index["folders"]["inbox"][0]["processed"] is False
+        assert (
+            loaded_index_manager.to_dict()["folders"]["inbox"][0]["email_id"]
+            == "test123"
+        )
+        assert (
+            loaded_index_manager.to_dict()["folders"]["inbox"][0]["subject"]
+            == "Test Subject"
+        )
+        assert (
+            loaded_index_manager.to_dict()["folders"]["inbox"][0]["has_attachments"]
+            is True
+        )
+        assert (
+            loaded_index_manager.to_dict()["folders"]["inbox"][0]["processed"] is False
+        )
 
 
 def test_is_email_processed():
@@ -205,7 +221,7 @@ def test_is_email_processed():
         storage = StorageManager(temp_dir)
 
         # Create test index with processed and unprocessed emails
-        test_index = {
+        test_index_dict = {
             "folders": {
                 "inbox": [
                     {
@@ -223,14 +239,41 @@ def test_is_email_processed():
                 ]
             }
         }
+        test_index_manager = IndexManager.load_from_dict(test_index_dict)
 
-        storage.save_index("test_account", test_index)  # type: ignore[arg-type]
+        storage.save_index("test_account", test_index_manager)
 
         # Test checking processed status
         assert storage.is_email_processed("test_account", "inbox", "123") is True
         assert storage.is_email_processed("test_account", "inbox", "456") is False
         assert storage.is_email_processed("test_account", "inbox", "999") is False
         assert storage.is_email_processed("test_account", "sent", "123") is False
+
+
+def test_email_exists():
+    """Test checking if email exists in index."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        storage = StorageManager(temp_dir)
+
+        # Create test index
+        test_index_dict = {
+            "folders": {
+                "inbox": [
+                    {
+                        "email_id": "123",
+                        "subject": "Test Email",
+                        "from_address": "test@example.com",
+                    }
+                ]
+            }
+        }
+        test_index_manager = IndexManager.load_from_dict(test_index_dict)
+        storage.save_index("test_account", test_index_manager)
+
+        # Test email existence
+        assert test_index_manager.email_exists("inbox", "123") is True
+        assert test_index_manager.email_exists("inbox", "999") is False
+        assert test_index_manager.email_exists("sent", "123") is False
 
 
 def test_email_storage_and_retrieval():

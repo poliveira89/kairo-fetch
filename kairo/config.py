@@ -1,10 +1,12 @@
 """Configuration management for email-fetch."""
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TypedDict
 
 
+@dataclass
 class AccountConfig(TypedDict):
     """Type for account configuration."""
 
@@ -15,6 +17,7 @@ class AccountConfig(TypedDict):
     client_id: str | None
     client_secret: str | None
     server: str | None
+    refresh_token: str | None
     port: int
 
 
@@ -24,6 +27,7 @@ class StorageConfig(TypedDict):
     path: str
 
 
+@dataclass
 class ConfigData(TypedDict):
     """Type for configuration data."""
 
@@ -48,9 +52,9 @@ class Config:
         """Load configuration from file."""
         try:
             with open(self.config_path, "r") as f:
-                return json.load(f)
+                data = json.load(f)
+                return ConfigData(**data)
         except (FileNotFoundError, json.JSONDecodeError):
-            # Return default empty config with proper storage path
             default_storage_path = str(Path.home() / ".kairo" / "storage")
             return {"accounts": {}, "storage": {"path": default_storage_path}}
 
@@ -59,9 +63,11 @@ class Config:
         with open(self.config_path, "w") as f:
             json.dump(self.data, f, indent=2)
 
-    def get_account(self, account_name: str) -> AccountConfig | dict[str, object]:
+    def get_account(self, account_name: str) -> AccountConfig | None:
         """Get account configuration."""
-        return self.data.get("accounts", {}).get(account_name, {})
+        accounts = self.data.get("accounts", {})
+        account_data = accounts.get(account_name)
+        return account_data if account_data is not None else None
 
     def set_account(self, account_name: str, account_data: AccountConfig) -> None:
         """Set account configuration."""

@@ -173,7 +173,7 @@ def test_config_invalid_account_data():
 
     # Test getting non-existent account
     result = config.get_account("nonexistent")
-    assert result == {}
+    assert result is None
 
     # Test setting invalid account data - config is flexible and doesn't raise errors
     # This is actually valid behavior - the config accepts any dict

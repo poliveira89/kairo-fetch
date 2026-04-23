@@ -2,13 +2,119 @@
 
 import json
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Dict, List, TypedDict
+
+
+class IndexEmailMetadata(TypedDict):
+    """Type for email metadata in index."""
+
+    email_id: str
+    from_address: str
+    to_addresses: List[str]
+    subject: str
+    date: str
+    folder: str
+    attachments: List[str]
+    has_attachments: bool
+    processed: bool
+
+
+class IndexFolderData(TypedDict):
+    """Type for folder data in index."""
+
+    emails: List[IndexEmailMetadata]
 
 
 class IndexData(TypedDict):
     """Type for index data."""
 
-    folders: dict[str, list[dict[str, Any]]]
+    folders: Dict[str, List[IndexEmailMetadata]]
+
+
+class IndexManager:
+    """OOP abstraction for managing email index."""
+
+    def __init__(self, index_data: IndexData):
+        self._index_data = index_data
+
+    @classmethod
+    def create_empty(cls) -> "IndexManager":
+        """Create empty IndexManager with default structure."""
+        return cls({"folders": {}})
+
+    @classmethod
+    def load_from_dict(cls, index_dict: dict) -> "IndexManager":
+        """Create IndexManager from raw dictionary."""
+        if "folders" not in index_dict:
+            index_dict["folders"] = {}
+        # Cast to IndexData type since we've ensured the structure
+        index_data: IndexData = {"folders": index_dict["folders"]}
+        return cls(index_data)
+
+    def to_dict(self) -> IndexData:
+        """Convert to dictionary for storage."""
+        return self._index_data
+
+    def get_emails_in_folder(self, folder: str) -> List[IndexEmailMetadata]:
+        """Get all emails in a specific folder."""
+        return self._index_data["folders"].get(folder, [])
+
+    def email_exists(self, folder: str, email_id: str) -> bool:
+        """Check if email with given ID exists in folder."""
+        folder_emails = self.get_emails_in_folder(folder)
+        return any(email.get("email_id") == email_id for email in folder_emails)
+
+    def is_email_processed(self, folder: str, email_id: str) -> bool:
+        """Check if email is marked as processed."""
+        folder_emails = self.get_emails_in_folder(folder)
+        for email_metadata in folder_emails:
+            if email_metadata.get("email_id") == email_id:
+                return email_metadata.get("processed", False)
+        return False
+
+    def add(self, folder: str, email_metadata: IndexEmailMetadata) -> None:
+        """Add or update email in index."""
+        self.ensure_folder_exists(folder)
+
+        existing_emails = self._index_data["folders"][folder]
+        email_already_in_index = False
+        for i, existing_email in enumerate(existing_emails):
+            if existing_email.get("email_id") == email_metadata["email_id"]:
+                existing_emails[i] = email_metadata
+                email_already_in_index = True
+                break
+
+        if not email_already_in_index:
+            existing_emails.append(email_metadata)
+
+    def mark_email_as_processed(self, folder: str, email_id: str) -> bool:
+        """Mark email as processed. Returns True if found and updated."""
+        folder_emails = self.get_emails_in_folder(folder)
+        for email_metadata in folder_emails:
+            if email_metadata.get("email_id") == email_id:
+                email_metadata["processed"] = True
+                return True
+        return False
+
+    def get_unprocessed_emails(self, folder: str) -> List[IndexEmailMetadata]:
+        """Get only unprocessed emails from a folder."""
+        return [
+            email
+            for email in self.get_emails_in_folder(folder)
+            if not email.get("processed", False)
+        ]
+
+    def ensure_folder_exists(self, folder: str) -> None:
+        """Ensure folder exists in index, create if not."""
+        if folder not in self._index_data["folders"]:
+            self._index_data["folders"][folder] = []
+
+    def get_folders(self):
+        return self._index_data["folders"]
+
+    def get_folder(self, folder: str):
+        self.ensure_folder_exists(folder)
+        return self._index_data["folders"][folder]
 
 
 class StorageManager:
@@ -33,15 +139,8 @@ class StorageManager:
 
     def is_email_processed(self, account_name: str, folder: str, email_id: str) -> bool:
         """Check if email is marked as processed in index."""
-        index = self.load_index(account_name)
-        if "folders" not in index:
-            return False
-
-        folder_emails = index["folders"].get(folder, [])
-        for email_metadata in folder_emails:
-            if email_metadata.get("email_id") == email_id:
-                return email_metadata.get("processed", False)
-        return False
+        index_manager = self.load_index(account_name)
+        return index_manager.is_email_processed(folder, email_id)
 
     def get_attachment_path(
         self, account_name: str, attachment_id: str, original_filename: str
@@ -59,20 +158,21 @@ class StorageManager:
         account_path = self.get_account_path(account_name)
         return account_path / "index.json"
 
-    def load_index(self, account_name: str) -> IndexData:
+    def load_index(self, account_name: str) -> IndexManager:
         """Load index for account."""
         index_path = self.get_index_path(account_name)
         try:
             with open(index_path, "r") as f:
-                return json.load(f)  # type: ignore[return-value]
+                index_dict = json.load(f)
+                return IndexManager.load_from_dict(index_dict)
         except (FileNotFoundError, json.JSONDecodeError):
-            return {"folders": {}}
+            return IndexManager.create_empty()
 
-    def save_index(self, account_name: str, index_data: IndexData) -> None:
+    def save_index(self, account_name: str, index_manager: IndexManager) -> None:
         """Save index for account."""
         index_path = self.get_index_path(account_name)
         with open(index_path, "w") as f:
-            json.dump(index_data, f, indent=2)
+            json.dump(index_manager.to_dict(), f, indent=2)
 
     def _sanitize_filename(self, filename: str) -> str:
         """Make filename safe for storage."""

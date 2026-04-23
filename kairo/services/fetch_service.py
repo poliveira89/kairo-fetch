@@ -9,70 +9,48 @@ from ..retrievers.gmail import GmailRetriever
 from ..storage import StorageManager
 
 
-class FetchService:
-    """Service for handling email fetch operations."""
+class EmailProcessor:
+    """Handles processing of individual emails."""
 
-    def __init__(self, config: Config):
-        self.config = config
+    def __init__(self, storage: StorageManager, retriever: Any):
+        self.storage = storage
+        self.retriever = retriever
 
-    def _process_single_email(
-        self,
-        storage: StorageManager,
-        retriever: Any,
-        account_name: str,
-        folder: str,
-        email_data: Dict[str, Any],
+    def process_email(
+        self, account_name: str, folder: str, email_data: Dict[str, Any]
     ) -> bool:
         """Process a single email and return True if successful."""
         email_id = str(email_data["email_id"])
 
         # Save raw email (overwrite if exists - this is the tradeoff)
-        email_path = storage.get_email_path(str(account_name), str(folder), email_id)
+        email_path = self.storage.get_email_path(
+            str(account_name), str(folder), email_id
+        )
         with open(email_path, "w") as f:
             f.write(email_data["raw"])
 
         # Update index but don't mark as processed yet
-        index = storage.load_index(str(account_name))
-        # Simple index update - just use the loaded index directly
-        # Type checking is complex here but the logic is sound
-        index_dict = index if isinstance(index, dict) else {"folders": {}}
-        if "folders" not in index_dict:  # type: ignore[operator]
-            index_dict["folders"] = {}  # type: ignore[index]
-        if folder not in index_dict["folders"]:  # type: ignore[operator]
-            index_dict["folders"][folder] = []  # type: ignore[index]
+        index = self.storage.load_index(str(account_name))
 
-        metadata = retriever.get_email_metadata(email_data)
-        # Set processed=False initially
+        metadata = self.retriever.get_email_metadata(email_data)
         metadata_dict = metadata.dict()
-        metadata_dict["processed"] = False
 
-        # Check if email already exists in index (partial processing case)
-        existing_emails = index_dict["folders"][folder]  # type: ignore[index]
-        email_already_in_index = False
-        for i, existing_email in enumerate(existing_emails):
-            if existing_email.get("email_id") == email_id:
-                # Overwrite existing entry (tradeoff: force overwrite)
-                existing_emails[i] = metadata_dict
-                email_already_in_index = True
-                break
-
+        email_already_in_index = index.is_email_processed(folder, email_id)
         if not email_already_in_index:
-            existing_emails.append(metadata_dict)
+            index.add(folder, metadata_dict)
 
-        storage.save_index(str(account_name), index_dict)  # type: ignore[arg-type]
+        self.storage.save_index(str(account_name), index)
 
         click.echo(f"  Saved email: {email_data['subject']} (ID: {email_id})")
 
-        # Mark this email as processed immediately after successful processing
-        index = storage.load_index(str(account_name))
-        if "folders" in index and folder in index["folders"]:
-            for email_metadata in index["folders"][folder]:
-                if email_metadata.get("email_id") == email_id:
-                    email_metadata["processed"] = True
-                    break
-        storage.save_index(str(account_name), index)  # type: ignore[arg-type]
-
         return True
+
+
+class AccountFinder:
+    """Handles finding and validating account configurations."""
+
+    def __init__(self, config: Config):
+        self.config = config
 
     def validate_imap_requirements(self, provider: str, server: str | None) -> bool:
         """Validate IMAP provider requirements."""
@@ -83,7 +61,7 @@ class FetchService:
 
     def find_account_config(
         self, provider: str, account: str | None
-    ) -> Tuple[str | None, AccountConfig | dict[str, object] | None]:
+    ) -> Tuple[str | None, AccountConfig | None]:
         """Find account configuration based on provider and account name."""
         if account:
             # Specific account requested
@@ -97,7 +75,7 @@ class FetchService:
         else:
             # Find first account matching the provider
             accounts = self.config.data.get("accounts", {})
-            matching_accounts: List[Tuple[str, AccountConfig | dict[str, object]]] = []
+            matching_accounts: List[Tuple[str, AccountConfig]] = []
 
             for name, acc in accounts.items():
                 # Match by provider field OR by account name matching provider
@@ -120,8 +98,15 @@ class FetchService:
 
             return matching_accounts[0][0], matching_accounts[0][1]
 
-    def handle_gmail_authentication(
-        self, account: str, account_config: Dict[str, Any]
+
+class GmailAuthenticator:
+    """Handles Gmail authentication."""
+
+    def __init__(self, config: Config):
+        self.config = config
+
+    def authenticate(
+        self, account: str, account_config: AccountConfig
     ) -> GmailRetriever | None:
         """Handle Gmail authentication and return retriever."""
         username = account_config.get("username")
@@ -191,7 +176,7 @@ class FetchService:
                 account_config["access_token"] = access_token
                 if refresh_token:
                     account_config["refresh_token"] = refresh_token
-                self.config.set_account(account, account_config)  # type: ignore[arg-type]
+                self.config.set_account(account, account_config)
                 self.config.save()
 
                 return GmailRetriever(username=username, access_token=access_token)
@@ -211,6 +196,15 @@ class FetchService:
             )
             return None
 
+
+class EmailFetchService:
+    """Service for handling email fetch operations."""
+
+    def __init__(self, config: Config):
+        self.config = config
+        self.account_finder = AccountFinder(config)
+        self.gmail_authenticator = GmailAuthenticator(config)
+
     def fetch_emails(
         self,
         provider: str,
@@ -221,11 +215,13 @@ class FetchService:
     ) -> None:
         """Main fetch emails method."""
         # Validate requirements
-        if not self.validate_imap_requirements(provider, server):
+        if not self.account_finder.validate_imap_requirements(provider, server):
             return
 
         # Find account configuration
-        account_name, account_config = self.find_account_config(provider, account)
+        account_name, account_config = self.account_finder.find_account_config(
+            provider, account
+        )
         if not account_name or not account_config:
             return
 
@@ -235,16 +231,15 @@ class FetchService:
 
         try:
             if provider == "gmail":
-                # Handle Gmail authentication
-                retriever = self.handle_gmail_authentication(
-                    account_name,
-                    account_config,  # type: ignore[arg-type]
+                retriever = self.gmail_authenticator.authenticate(
+                    account_name, account_config
                 )
                 if not retriever:
                     return
 
                 # Fetch and process emails with proper limit handling
                 storage = StorageManager(self.config.get_storage_path())
+                email_processor = EmailProcessor(storage, retriever)
                 processed_count = 0
 
                 click.echo(
@@ -276,57 +271,15 @@ class FetchService:
                         click.echo(f"  Reached limit of {limit} unprocessed emails")
                         break
 
-                    # Save raw email (overwrite if exists - this is the tradeoff)
-                    email_path = storage.get_email_path(
-                        str(account_name), str(folder), email_id
-                    )
-                    with open(email_path, "w") as f:
-                        f.write(email_data["raw"])
+                    # Process the email
+                    email_processor.process_email(account_name, folder, email_data)
 
-                    # Update index but don't mark as processed yet
+                    # Mark email as processed
                     index = storage.load_index(str(account_name))
-                    # Simple index update - just use the loaded index directly
-                    # Type checking is complex here but the logic is sound
-                    index_dict = index if isinstance(index, dict) else {"folders": {}}
-                    if "folders" not in index_dict:  # type: ignore[operator]
-                        index_dict["folders"] = {}  # type: ignore[index]
-                    if folder not in index_dict["folders"]:  # type: ignore[operator]
-                        index_dict["folders"][folder] = []  # type: ignore[index]
+                    if index.mark_email_as_processed(folder, email_id):
+                        storage.save_index(str(account_name), index)
 
-                    metadata = retriever.get_email_metadata(email_data)
-                    # Set processed=False initially
-                    metadata_dict = metadata.dict()
-                    metadata_dict["processed"] = False
-
-                    # Check if email already exists in index (partial processing case)
-                    existing_emails = index_dict["folders"][folder]  # type: ignore[index]
-                    email_already_in_index = False
-                    for i, existing_email in enumerate(existing_emails):
-                        if existing_email.get("email_id") == email_id:
-                            # Overwrite existing entry (tradeoff: force overwrite)
-                            existing_emails[i] = metadata_dict
-                            email_already_in_index = True
-                            break
-
-                    if not email_already_in_index:
-                        existing_emails.append(metadata_dict)
-
-                    storage.save_index(str(account_name), index_dict)  # type: ignore[arg-type]
-
-                    click.echo(
-                        f"  Saved email: {email_data['subject']} (ID: {email_id})"
-                    )
-
-                    # Mark this email as processed immediately after successful processing
-                    index = storage.load_index(str(account_name))
-                    if "folders" in index and folder in index["folders"]:
-                        for email_metadata in index["folders"][folder]:
-                            if email_metadata.get("email_id") == email_id:
-                                email_metadata["processed"] = True
-                                break
-                    storage.save_index(str(account_name), index)  # type: ignore[arg-type]
-
-                processed_count += 1
+                    processed_count += 1
 
                 if processed_count >= limit:
                     click.echo(f"  Reached limit of {limit} processed emails")
@@ -342,3 +295,10 @@ class FetchService:
 
         except Exception as e:
             click.echo(f"Error fetching emails: {e}", err=True)
+
+
+# Main service class for backward compatibility
+class FetchService(EmailFetchService):
+    """Service for handling email fetch operations."""
+
+    pass
