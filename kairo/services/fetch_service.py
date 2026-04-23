@@ -22,14 +22,12 @@ class EmailProcessor:
         """Process a single email and return True if successful."""
         email_id = str(email_data["email_id"])
 
-        # Save raw email (overwrite if exists - this is the tradeoff)
         email_path = self.storage.get_email_path(
             str(account_name), str(folder), email_id
         )
         with open(email_path, "w") as f:
             f.write(email_data["raw"])
 
-        # Update index but don't mark as processed yet
         index = self.storage.load_index(str(account_name))
 
         metadata = self.retriever.get_email_metadata(email_data)
@@ -64,7 +62,6 @@ class AccountFinder:
     ) -> Tuple[str | None, AccountConfig | None]:
         """Find account configuration based on provider and account name."""
         if account:
-            # Specific account requested
             account_config = self.config.get_account(account)
             if not account_config:
                 click.echo(
@@ -73,12 +70,10 @@ class AccountFinder:
                 return None, None
             return account, account_config
         else:
-            # Find first account matching the provider
             accounts = self.config.data.get("accounts", {})
             matching_accounts: List[Tuple[str, AccountConfig]] = []
 
             for name, acc in accounts.items():
-                # Match by provider field OR by account name matching provider
                 if acc.get("provider") == provider or name == provider:
                     matching_accounts.append((name, acc))
 
@@ -117,25 +112,20 @@ class GmailAuthenticator:
             click.echo("Error: Username not configured for account", err=True)
             return None
 
-        # Check if we need to perform OAuth2 flow
         client_id = account_config.get("client_id")
         client_secret = account_config.get("client_secret")
 
-        # Use existing access token if available
         if access_token:
             click.echo("Using OAuth2 authentication with existing token")
             return GmailRetriever(username=username, access_token=access_token)
 
-        # Perform OAuth2 flow if we have client credentials but no token
         elif client_id and client_secret and not access_token:
             click.echo("Performing OAuth2 authentication flow...")
 
-            # Import OAuth2 modules
             import json
             from urllib.parse import urlencode
             from urllib.request import Request, urlopen
 
-            # Step 1: Generate authorization URL
             auth_url = "https://accounts.google.com/o/oauth2/auth?" + urlencode(
                 {
                     "client_id": client_id,
@@ -148,10 +138,8 @@ class GmailAuthenticator:
             click.echo("1. Visit this URL to authorize:")
             click.echo(f"   {auth_url}")
 
-            # Step 2: Get authorization code
             auth_code = click.prompt("2. Paste the authorization code")
 
-            # Step 3: Exchange for access token
             click.echo("3. Exchanging code for access token...")
 
             token_url = "https://oauth2.googleapis.com/token"
@@ -172,7 +160,6 @@ class GmailAuthenticator:
 
                 click.echo("✅ OAuth2 authentication successful!")
 
-                # Update config with new token
                 account_config["access_token"] = access_token
                 if refresh_token:
                     account_config["refresh_token"] = refresh_token
@@ -185,7 +172,6 @@ class GmailAuthenticator:
                 click.echo(f"❌ OAuth2 authentication failed: {e}", err=True)
                 return None
 
-        # Use password authentication as fallback
         elif password:
             return GmailRetriever(username=username, password=password)
 
@@ -214,11 +200,9 @@ class EmailFetchService:
         limit: int,
     ) -> None:
         """Main fetch emails method."""
-        # Validate requirements
         if not self.account_finder.validate_imap_requirements(provider, server):
             return
 
-        # Find account configuration
         account_name, account_config = self.account_finder.find_account_config(
             provider, account
         )
@@ -237,7 +221,6 @@ class EmailFetchService:
                 if not retriever:
                     return
 
-                # Fetch and process emails with proper limit handling
                 storage = StorageManager(self.config.get_storage_path())
                 email_processor = EmailProcessor(storage, retriever)
                 processed_count = 0
@@ -258,7 +241,6 @@ class EmailFetchService:
                 for email_data in emails:
                     email_id = str(email_data["email_id"])
 
-                    # Check if email is already processed
                     is_processed = storage.is_email_processed(
                         str(account_name), str(folder), email_id
                     )
@@ -268,25 +250,17 @@ class EmailFetchService:
                         continue
 
                     if processed_count >= limit:
-                        click.echo(f"  Reached limit of {limit} unprocessed emails")
                         break
 
-                    # Process the email
                     email_processor.process_email(account_name, folder, email_data)
 
-                    # Mark email as processed
                     index = storage.load_index(str(account_name))
                     if index.mark_email_as_processed(folder, email_id):
                         storage.save_index(str(account_name), index)
 
                     processed_count += 1
 
-                if processed_count >= limit:
-                    click.echo(f"  Reached limit of {limit} processed emails")
-
-                click.echo(
-                    f"Processed {processed_count} unprocessed emails (limit: {limit})"
-                )
+                click.echo(f"Processed {processed_count} emails (limit: {limit})")
             elif provider == "imap":
                 # TODO: Implement IMAP retrieval
                 click.echo("IMAP provider not yet implemented")

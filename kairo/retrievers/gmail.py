@@ -35,13 +35,11 @@ class GmailRetriever:
         imap = imaplib.IMAP4_SSL(self.imap_server, self.imap_port)
 
         if self.access_token:
-            # Use OAuth2 authentication
             auth_string = (
                 f"user={self.username}\x01auth=Bearer {self.access_token}\x01\x01"
             )
             imap.authenticate("XOAUTH2", lambda x: auth_string.encode())
         else:
-            # Use basic authentication
             if self.password:
                 imap.login(self.username, self.password)
             else:
@@ -66,19 +64,16 @@ class GmailRetriever:
         try:
             imap = self.connect()
 
-            # Select the mailbox
             status, _ = imap.select(folder)
             if status != "OK":
                 raise Exception(f"Failed to select folder: {folder}")
 
-            # Search for all emails
             status, messages = imap.search(None, "ALL")
             if status != "OK":
                 raise Exception("Failed to search emails")
 
             email_ids = messages[0].split()
 
-            # Fetch the most recent emails (up to limit)
             for email_id in email_ids[-limit:]:
                 status, msg_data = imap.fetch(email_id, "(RFC822)")
                 if status != "OK":
@@ -120,11 +115,9 @@ class GmailRetriever:
         to_addresses = email_message["to"] or ""
         date = email_message["date"] or "Unknown Date"
 
-        # Parse to addresses
         if isinstance(to_addresses, str):
             to_addresses = [addr.strip() for addr in to_addresses.split(",")]
 
-        # Check for attachments
         attachments = []
         has_attachments = False
 

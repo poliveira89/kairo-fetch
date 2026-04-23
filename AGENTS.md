@@ -221,7 +221,7 @@ def test_config_loading():
 
 **Code should be self-documenting first, comments should explain the "why" not the "what"**
 
-- Avoid one-liner comments for obvious code
+- Don't write one-liner comments inside methods or classes
 - Document macro actions and architectural decisions
 - Explain why something was implemented a certain way
 - Help future developers understand the reasoning behind choices
@@ -301,6 +301,7 @@ def fetch_emails(folder: str, limit: int) -> list[EmailMetadata]:
 - **Consistency**: Follow existing patterns
 - **Simplicity**: Prefer simple solutions
 - **Readability**: Clear, expressive code
+- **OOP**: Use classes and objects with proper methods to interact with data
 
 ## When in Doubt
 

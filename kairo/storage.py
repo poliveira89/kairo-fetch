@@ -47,7 +47,6 @@ class IndexManager:
         """Create IndexManager from raw dictionary."""
         if "folders" not in index_dict:
             index_dict["folders"] = {}
-        # Cast to IndexData type since we've ensured the structure
         index_data: IndexData = {"folders": index_dict["folders"]}
         return cls(index_data)
 
@@ -149,7 +148,6 @@ class StorageManager:
         account_path = self.get_account_path(account_name)
         attachments_path = account_path / "attachments"
         attachments_path.mkdir(exist_ok=True)
-        # Use original filename but ensure it's safe
         safe_filename = self._sanitize_filename(original_filename)
         return attachments_path / f"{attachment_id}_{safe_filename}"
 
@@ -176,12 +174,10 @@ class StorageManager:
 
     def _sanitize_filename(self, filename: str) -> str:
         """Make filename safe for storage."""
-        # Remove invalid characters
         safe_chars = "-_.() []{}"
         sanitized = "".join(
             c if c.isalnum() or c in safe_chars else "_" for c in filename
         )
-        # Ensure it's not empty
         return sanitized if sanitized else "attachment"
 
     def __repr__(self) -> str:
