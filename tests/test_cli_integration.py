@@ -412,7 +412,7 @@ def test_oauth2_flow_success(mock_config_path, mock_request, mock_urlopen):
         config = Config(config_file)
         account_config = config.get_account("test_account")
         assert account_config["access_token"] == "test_access_token"
-        assert account_config["refresh_token"] == "test_refresh_token"
+        assert account_config["refresh_token"] == "test_refresh_token"  # type: ignore[index]
 
     finally:
         os.unlink(config_file)

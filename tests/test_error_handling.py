@@ -51,7 +51,7 @@ def test_config_file_invalid_json():
 def test_gmail_retriever_missing_username():
     """Test Gmail retriever with missing username."""
     with pytest.raises(TypeError):
-        GmailRetriever()  # Missing required username parameter
+        GmailRetriever()  # Missing required username parameter  # type: ignore[call-arg]
 
 
 def test_gmail_retriever_connection_failure():
@@ -146,7 +146,7 @@ def test_storage_invalid_path():
     """Test storage with invalid path."""
     # Test with None path
     with pytest.raises(TypeError):
-        StorageManager(None)
+        StorageManager(None)  # type: ignore[arg-type]
 
 
 def test_storage_permission_error():
@@ -178,7 +178,7 @@ def test_config_invalid_account_data():
     # Test setting invalid account data - config is flexible and doesn't raise errors
     # This is actually valid behavior - the config accepts any dict
     invalid_data = {"invalid": "data"}
-    config.set_account("test", invalid_data)
+    config.set_account("test", invalid_data)  # type: ignore[arg-type]
     retrieved = config.get_account("test")
     assert retrieved == invalid_data
 
@@ -196,7 +196,7 @@ def test_email_metadata_validation():
             subject="Test",
             date="2024-01-01",
             folder="inbox",
-        )
+        )  # type: ignore[call-arg]
 
     # Test with valid data
     metadata = EmailMetadata(
