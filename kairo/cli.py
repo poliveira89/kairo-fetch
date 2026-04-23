@@ -30,7 +30,6 @@ def cli(ctx: click.Context) -> None:
 )
 @click.option("--folder", default="inbox", help="Folder/label to fetch from")
 @click.option("--server", help="IMAP server address (required for IMAP)")
-@click.option("--port", type=int, default=993, help="IMAP server port")
 @click.option("--limit", type=int, default=10, help="Maximum number of emails to fetch")
 @click.pass_context
 def fetch(
@@ -39,13 +38,12 @@ def fetch(
     account: str | None,
     folder: str,
     server: str | None,
-    port: int,
     limit: int,
 ) -> None:
     """Fetch emails from specified provider and folder."""
     config = ctx.obj["config"]
     fetch_service = FetchService(config)
-    fetch_service.fetch_emails(provider, account, folder, server, port, limit)
+    fetch_service.fetch_emails(provider, account, folder, server, limit)
 
 
 @cli.command()

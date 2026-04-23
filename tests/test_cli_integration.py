@@ -353,7 +353,7 @@ def test_multiple_accounts_selection(mock_config_path):
 @patch("urllib.request.urlopen")
 @patch("urllib.request.Request")
 @patch("kairo.config.Config._get_default_config_path")
-def test_oauth2_flow_success(mock_config_path, mock_request, mock_urlopen):
+def test_oauth2_flow_success(mock_config_path, _, mock_urlopen):
     """Test successful OAuth2 flow."""
     runner = CliRunner()
 
@@ -485,7 +485,7 @@ def test_missing_username_in_account(mock_config_path):
             "accounts": {
                 "incomplete_account": {
                     "provider": "gmail",
-                    "password": "test_password"
+                    "password": "test_password",
                     # Missing username
                 }
             },
@@ -532,7 +532,7 @@ def test_no_authentication_method(mock_config_path):
             "accounts": {
                 "no_auth_account": {
                     "provider": "gmail",
-                    "username": "test@example.com"
+                    "username": "test@example.com",
                     # Missing password and OAuth2 credentials
                 }
             },

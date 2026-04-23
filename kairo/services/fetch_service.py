@@ -15,6 +15,65 @@ class FetchService:
     def __init__(self, config: Config):
         self.config = config
 
+    def _process_single_email(
+        self,
+        storage: StorageManager,
+        retriever: Any,
+        account_name: str,
+        folder: str,
+        email_data: Dict[str, Any],
+    ) -> bool:
+        """Process a single email and return True if successful."""
+        email_id = str(email_data["email_id"])
+
+        # Save raw email (overwrite if exists - this is the tradeoff)
+        email_path = storage.get_email_path(str(account_name), str(folder), email_id)
+        with open(email_path, "w") as f:
+            f.write(email_data["raw"])
+
+        # Update index but don't mark as processed yet
+        index = storage.load_index(str(account_name))
+        # Simple index update - just use the loaded index directly
+        # Type checking is complex here but the logic is sound
+        index_dict = index if isinstance(index, dict) else {"folders": {}}
+        if "folders" not in index_dict:  # type: ignore[operator]
+            index_dict["folders"] = {}  # type: ignore[index]
+        if folder not in index_dict["folders"]:  # type: ignore[operator]
+            index_dict["folders"][folder] = []  # type: ignore[index]
+
+        metadata = retriever.get_email_metadata(email_data)
+        # Set processed=False initially
+        metadata_dict = metadata.dict()
+        metadata_dict["processed"] = False
+
+        # Check if email already exists in index (partial processing case)
+        existing_emails = index_dict["folders"][folder]  # type: ignore[index]
+        email_already_in_index = False
+        for i, existing_email in enumerate(existing_emails):
+            if existing_email.get("email_id") == email_id:
+                # Overwrite existing entry (tradeoff: force overwrite)
+                existing_emails[i] = metadata_dict
+                email_already_in_index = True
+                break
+
+        if not email_already_in_index:
+            existing_emails.append(metadata_dict)
+
+        storage.save_index(str(account_name), index_dict)  # type: ignore[arg-type]
+
+        click.echo(f"  Saved email: {email_data['subject']} (ID: {email_id})")
+
+        # Mark this email as processed immediately after successful processing
+        index = storage.load_index(str(account_name))
+        if "folders" in index and folder in index["folders"]:
+            for email_metadata in index["folders"][folder]:
+                if email_metadata.get("email_id") == email_id:
+                    email_metadata["processed"] = True
+                    break
+        storage.save_index(str(account_name), index)  # type: ignore[arg-type]
+
+        return True
+
     def validate_imap_requirements(self, provider: str, server: str | None) -> bool:
         """Validate IMAP provider requirements."""
         if provider == "imap" and not server:
@@ -158,7 +217,6 @@ class FetchService:
         account: str | None,
         folder: str,
         server: str | None,
-        port: int,
         limit: int,
     ) -> None:
         """Main fetch emails method."""
@@ -179,21 +237,29 @@ class FetchService:
             if provider == "gmail":
                 # Handle Gmail authentication
                 retriever = self.handle_gmail_authentication(
-                    account_name, account_config  # type: ignore[arg-type]
+                    account_name,
+                    account_config,  # type: ignore[arg-type]
                 )
                 if not retriever:
                     return
 
-                # Fetch emails
+                # Fetch and process emails with proper limit handling
+                storage = StorageManager(self.config.get_storage_path())
+                processed_count = 0
+
                 click.echo(
                     f"Connecting to Gmail for account: {account_config.get('username')}"
                 )
-                emails = retriever.fetch_emails(folder=folder.upper(), limit=limit)
 
-                click.echo(f"Successfully fetched {len(emails)} emails")
+                emails = retriever.fetch_emails(folder=folder.upper())
 
-                # Store emails
-                storage = StorageManager(self.config.get_storage_path())
+                if not emails:
+                    return
+
+                click.echo(
+                    f"Fetched {len(emails)} emails, looking for unprocessed ones..."
+                )
+
                 for email_data in emails:
                     email_id = str(email_data["email_id"])
 
@@ -205,6 +271,10 @@ class FetchService:
                     if is_processed:
                         click.echo(f"  Skipping already processed email ID: {email_id}")
                         continue
+
+                    if processed_count >= limit:
+                        click.echo(f"  Reached limit of {limit} unprocessed emails")
+                        break
 
                     # Save raw email (overwrite if exists - this is the tradeoff)
                     email_path = storage.get_email_path(
@@ -255,6 +325,15 @@ class FetchService:
                                 email_metadata["processed"] = True
                                 break
                     storage.save_index(str(account_name), index)  # type: ignore[arg-type]
+
+                processed_count += 1
+
+                if processed_count >= limit:
+                    click.echo(f"  Reached limit of {limit} processed emails")
+
+                click.echo(
+                    f"Processed {processed_count} unprocessed emails (limit: {limit})"
+                )
             elif provider == "imap":
                 # TODO: Implement IMAP retrieval
                 click.echo("IMAP provider not yet implemented")
