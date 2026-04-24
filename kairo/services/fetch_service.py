@@ -76,7 +76,7 @@ class AccountFinder:
                 # Match if provider field matches, or if account name matches provider
                 # If no provider field is set, use account name as provider
                 effective_provider = acc.provider if acc.provider else name
-                
+
                 if effective_provider == provider or name == provider:
                     matching_accounts.append((name, acc))
 
