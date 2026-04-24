@@ -2,11 +2,13 @@
 
 import json
 from pathlib import Path
-from typing import Dict, List, TypedDict
+from typing import Dict, List
+
+from pydantic import BaseModel
 
 
-class IndexEmailMetadata(TypedDict):
-    """Type for email metadata in index."""
+class IndexEmailMetadata(BaseModel):
+    """Email metadata stored in index."""
 
     email_id: str
     from_address: str
@@ -19,14 +21,14 @@ class IndexEmailMetadata(TypedDict):
     processed: bool
 
 
-class IndexFolderData(TypedDict):
-    """Type for folder data in index."""
+class IndexFolderData(BaseModel):
+    """Folder data stored in index."""
 
     emails: List[IndexEmailMetadata]
 
 
-class IndexData(TypedDict):
-    """Type for index data."""
+class IndexData(BaseModel):
+    """Complete index data structure."""
 
     folders: Dict[str, List[IndexEmailMetadata]]
 
@@ -40,45 +42,70 @@ class IndexManager:
     @classmethod
     def create_empty(cls) -> "IndexManager":
         """Create empty IndexManager with default structure."""
-        return cls({"folders": {}})
+        return cls(IndexData(folders={}))
 
     @classmethod
     def load_from_dict(cls, index_dict: dict) -> "IndexManager":
         """Create IndexManager from raw dictionary."""
         if "folders" not in index_dict:
             index_dict["folders"] = {}
-        index_data: IndexData = {"folders": index_dict["folders"]}
+
+        # Convert old format to new format for backward compatibility
+        validated_folders = {}
+        for folder_name, emails in index_dict["folders"].items():
+            validated_emails = []
+            for email_data in emails:
+                try:
+                    # Try to create IndexEmailMetadata with all required fields
+                    validated_email = IndexEmailMetadata(
+                        email_id=email_data.get("email_id", ""),
+                        from_address=email_data.get("from_address", ""),
+                        to_addresses=email_data.get("to_addresses", []),
+                        subject=email_data.get("subject", ""),
+                        date=email_data.get("date", ""),
+                        folder=email_data.get("folder", folder_name),
+                        attachments=email_data.get("attachments", []),
+                        has_attachments=email_data.get("has_attachments", False),
+                        processed=email_data.get("processed", False),
+                    )
+                    validated_emails.append(validated_email)
+                except Exception:
+                    # Skip invalid emails for backward compatibility
+                    continue
+            validated_folders[folder_name] = validated_emails
+
+        index_data = IndexData(folders=validated_folders)
         return cls(index_data)
 
-    def to_dict(self) -> IndexData:
+    def to_dict(self) -> dict:
         """Convert to dictionary for storage."""
-        return self._index_data
+        return self._index_data.dict()
 
     def get_emails_in_folder(self, folder: str) -> List[IndexEmailMetadata]:
         """Get all emails in a specific folder."""
-        return self._index_data["folders"].get(folder, [])
+        return self._index_data.folders.get(folder, [])
 
     def email_exists(self, folder: str, email_id: str) -> bool:
         """Check if email with given ID exists in folder."""
         folder_emails = self.get_emails_in_folder(folder)
-        return any(email.get("email_id") == email_id for email in folder_emails)
+        return any(email.email_id == email_id for email in folder_emails)
 
     def is_email_processed(self, folder: str, email_id: str) -> bool:
         """Check if email is marked as processed."""
         folder_emails = self.get_emails_in_folder(folder)
         for email_metadata in folder_emails:
-            if email_metadata.get("email_id") == email_id:
-                return email_metadata.get("processed", False)
+            if email_metadata.email_id == email_id:
+                return email_metadata.processed
         return False
 
     def add(self, folder: str, email_metadata: IndexEmailMetadata) -> None:
         """Add or update email in index."""
         self.ensure_folder_exists(folder)
 
-        existing_emails = self._index_data["folders"][folder]
+        existing_emails = self._index_data.folders[folder]
         email_already_in_index = False
         for i, existing_email in enumerate(existing_emails):
-            if existing_email.get("email_id") == email_metadata["email_id"]:
+            if existing_email.email_id == email_metadata.email_id:
                 existing_emails[i] = email_metadata
                 email_already_in_index = True
                 break
@@ -90,30 +117,28 @@ class IndexManager:
         """Mark email as processed. Returns True if found and updated."""
         folder_emails = self.get_emails_in_folder(folder)
         for email_metadata in folder_emails:
-            if email_metadata.get("email_id") == email_id:
-                email_metadata["processed"] = True
+            if email_metadata.email_id == email_id:
+                email_metadata.processed = True
                 return True
         return False
 
     def get_unprocessed_emails(self, folder: str) -> List[IndexEmailMetadata]:
         """Get only unprocessed emails from a folder."""
         return [
-            email
-            for email in self.get_emails_in_folder(folder)
-            if not email.get("processed", False)
+            email for email in self.get_emails_in_folder(folder) if not email.processed
         ]
 
     def ensure_folder_exists(self, folder: str) -> None:
         """Ensure folder exists in index, create if not."""
-        if folder not in self._index_data["folders"]:
-            self._index_data["folders"][folder] = []
+        if folder not in self._index_data.folders:
+            self._index_data.folders[folder] = []
 
     def get_folders(self):
-        return self._index_data["folders"]
+        return self._index_data.folders
 
     def get_folder(self, folder: str):
         self.ensure_folder_exists(folder)
-        return self._index_data["folders"][folder]
+        return self._index_data.folders[folder]
 
 
 class StorageManager:

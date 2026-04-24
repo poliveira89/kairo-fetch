@@ -1,37 +1,36 @@
 """Configuration management for email-fetch."""
 
 import json
-from dataclasses import dataclass
 from pathlib import Path
-from typing import TypedDict
+from typing import Dict
+
+from pydantic import BaseModel
 
 
-@dataclass
-class AccountConfig(TypedDict):
-    """Type for account configuration."""
+class AccountConfig(BaseModel):
+    """Account configuration."""
 
     provider: str
     username: str
-    password: str | None
-    access_token: str | None
-    client_id: str | None
-    client_secret: str | None
-    server: str | None
-    refresh_token: str | None
-    port: int
+    password: str | None = None
+    access_token: str | None = None
+    client_id: str | None = None
+    client_secret: str | None = None
+    server: str | None = None
+    refresh_token: str | None = None
+    port: int = 993
 
 
-class StorageConfig(TypedDict):
-    """Type for storage configuration."""
+class StorageConfig(BaseModel):
+    """Storage configuration."""
 
     path: str
 
 
-@dataclass
-class ConfigData(TypedDict):
-    """Type for configuration data."""
+class ConfigData(BaseModel):
+    """Complete configuration data."""
 
-    accounts: dict[str, AccountConfig]
+    accounts: Dict[str, AccountConfig]
     storage: StorageConfig
 
 
@@ -53,10 +52,28 @@ class Config:
         try:
             with open(self.config_path, "r") as f:
                 data = json.load(f)
+                # Handle backward compatibility with old config format
+                if "accounts" not in data:
+                    data["accounts"] = {}
+                if "storage" not in data:
+                    data["storage"] = {"path": str(Path.home() / ".kairo" / "storage")}
+
+                # Validate and convert accounts to proper format
+                validated_accounts = {}
+                for account_name, account_data in data["accounts"].items():
+                    try:
+                        validated_accounts[account_name] = AccountConfig(**account_data)
+                    except Exception:
+                        # Skip invalid accounts for backward compatibility
+                        continue
+                data["accounts"] = validated_accounts
+
                 return ConfigData(**data)
         except (FileNotFoundError, json.JSONDecodeError):
             default_storage_path = str(Path.home() / ".kairo" / "storage")
-            return {"accounts": {}, "storage": {"path": default_storage_path}}
+            return ConfigData(
+                accounts={}, storage=StorageConfig(path=default_storage_path)
+            )
 
     def save(self) -> None:
         """Save configuration to file."""
@@ -65,21 +82,17 @@ class Config:
 
     def get_account(self, account_name: str) -> AccountConfig | None:
         """Get account configuration."""
-        accounts = self.data.get("accounts", {})
+        accounts = self.data.accounts
         account_data = accounts.get(account_name)
         return account_data if account_data is not None else None
 
     def set_account(self, account_name: str, account_data: AccountConfig) -> None:
         """Set account configuration."""
-        if "accounts" not in self.data:
-            self.data["accounts"] = {}
-        self.data["accounts"][account_name] = account_data
+        self.data.accounts[account_name] = account_data
 
     def get_storage_path(self) -> str:
         """Get storage path."""
-        return self.data.get("storage", {}).get(
-            "path", str(Path.home() / ".kairo" / "storage")
-        )
+        return self.data.storage.path
 
     def __repr__(self) -> str:
-        return f"Config(config_path={self.config_path}, accounts={list(self.data.get('accounts', {}).keys())})"
+        return f"Config(config_path={self.config_path}, accounts={list(self.data.accounts.keys())})"

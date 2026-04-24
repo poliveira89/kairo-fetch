@@ -94,6 +94,12 @@ def test_load_index_existing():
                         "email_id": "123",
                         "subject": "Test Email",
                         "from_address": "test@example.com",
+                        "to_addresses": [],
+                        "date": "",
+                        "folder": "inbox",
+                        "attachments": [],
+                        "has_attachments": False,
+                        "processed": False,
                     }
                 ]
             }
@@ -128,6 +134,12 @@ def test_save_index():
                         "email_id": "123",
                         "subject": "Test Email",
                         "from_address": "test@example.com",
+                        "to_addresses": [],
+                        "date": "",
+                        "folder": "inbox",
+                        "attachments": [],
+                        "has_attachments": False,
+                        "processed": False,
                     }
                 ]
             }
@@ -359,38 +371,38 @@ def test_index_manager_add_update():
     index_manager = IndexManager.create_empty()
 
     # Add initial email
-    email_metadata: IndexEmailMetadata = {
-        "email_id": "123",
-        "subject": "Original Subject",
-        "from_address": "test@example.com",
-        "to_addresses": ["recipient@example.com"],
-        "date": "2024-01-01",
-        "folder": "inbox",
-        "attachments": [],
-        "has_attachments": False,
-        "processed": False,
-    }
+    email_metadata: IndexEmailMetadata = IndexEmailMetadata(
+        email_id="123",
+        subject="Original Subject",
+        from_address="test@example.com",
+        to_addresses=["recipient@example.com"],
+        date="2024-01-01",
+        folder="inbox",
+        attachments=[],
+        has_attachments=False,
+        processed=False,
+    )
     index_manager.add("inbox", email_metadata)
 
     # Update the same email
-    updated_metadata: IndexEmailMetadata = {
-        "email_id": "123",
-        "subject": "Updated Subject",
-        "from_address": "test@example.com",
-        "to_addresses": ["recipient@example.com"],
-        "date": "2024-01-01",
-        "folder": "inbox",
-        "attachments": [],
-        "has_attachments": False,
-        "processed": True,
-    }
+    updated_metadata: IndexEmailMetadata = IndexEmailMetadata(
+        email_id="123",
+        subject="Updated Subject",
+        from_address="test@example.com",
+        to_addresses=["recipient@example.com"],
+        date="2024-01-01",
+        folder="inbox",
+        attachments=[],
+        has_attachments=False,
+        processed=True,
+    )
     index_manager.add("inbox", updated_metadata)
 
     # Verify update
     emails = index_manager.get_emails_in_folder("inbox")
     assert len(emails) == 1
-    assert emails[0]["subject"] == "Updated Subject"
-    assert emails[0]["processed"] is True
+    assert emails[0].subject == "Updated Subject"
+    assert emails[0].processed is True
 
 
 def test_index_manager_mark_email_as_processed():
@@ -398,17 +410,17 @@ def test_index_manager_mark_email_as_processed():
     index_manager = IndexManager.create_empty()
 
     # Add email
-    email_metadata: IndexEmailMetadata = {
-        "email_id": "123",
-        "subject": "Test Email",
-        "from_address": "test@example.com",
-        "to_addresses": ["recipient@example.com"],
-        "date": "2024-01-01",
-        "folder": "inbox",
-        "attachments": [],
-        "has_attachments": False,
-        "processed": False,
-    }
+    email_metadata: IndexEmailMetadata = IndexEmailMetadata(
+        email_id="123",
+        subject="Test Email",
+        from_address="test@example.com",
+        to_addresses=["recipient@example.com"],
+        date="2024-01-01",
+        folder="inbox",
+        attachments=[],
+        has_attachments=False,
+        processed=False,
+    )
     index_manager.add("inbox", email_metadata)
 
     # Mark as processed
@@ -417,7 +429,7 @@ def test_index_manager_mark_email_as_processed():
 
     # Verify it was marked as processed
     emails = index_manager.get_emails_in_folder("inbox")
-    assert emails[0]["processed"] is True
+    assert emails[0].processed is True
 
 
 def test_index_manager_mark_nonexistent_email():
@@ -432,36 +444,36 @@ def test_index_manager_get_unprocessed_emails():
     index_manager = IndexManager.create_empty()
 
     # Add processed and unprocessed emails
-    processed_email: IndexEmailMetadata = {
-        "email_id": "123",
-        "subject": "Processed Email",
-        "from_address": "test@example.com",
-        "to_addresses": ["recipient@example.com"],
-        "date": "2024-01-01",
-        "folder": "inbox",
-        "attachments": [],
-        "has_attachments": False,
-        "processed": True,
-    }
-    unprocessed_email: IndexEmailMetadata = {
-        "email_id": "456",
-        "subject": "Unprocessed Email",
-        "from_address": "test@example.com",
-        "to_addresses": ["recipient@example.com"],
-        "date": "2024-01-01",
-        "folder": "inbox",
-        "attachments": [],
-        "has_attachments": False,
-        "processed": False,
-    }
+    processed_email: IndexEmailMetadata = IndexEmailMetadata(
+        email_id="123",
+        subject="Processed Email",
+        from_address="test@example.com",
+        to_addresses=["recipient@example.com"],
+        date="2024-01-01",
+        folder="inbox",
+        attachments=[],
+        has_attachments=False,
+        processed=True,
+    )
+    unprocessed_email: IndexEmailMetadata = IndexEmailMetadata(
+        email_id="456",
+        subject="Unprocessed Email",
+        from_address="test@example.com",
+        to_addresses=["recipient@example.com"],
+        date="2024-01-01",
+        folder="inbox",
+        attachments=[],
+        has_attachments=False,
+        processed=False,
+    )
     index_manager.add("inbox", processed_email)
     index_manager.add("inbox", unprocessed_email)
 
     # Get unprocessed emails
     unprocessed = index_manager.get_unprocessed_emails("inbox")
     assert len(unprocessed) == 1
-    assert unprocessed[0]["email_id"] == "456"
-    assert unprocessed[0]["processed"] is False
+    assert unprocessed[0].email_id == "456"
+    assert unprocessed[0].processed is False
 
 
 def test_index_manager_ensure_folder_exists():
@@ -481,17 +493,17 @@ def test_index_manager_get_folders():
     # Add emails to different folders
     index_manager.add(
         "inbox",
-        {
-            "email_id": "123",
-            "subject": "Test",
-            "from_address": "test@example.com",
-            "to_addresses": [],
-            "date": "2024-01-01",
-            "folder": "inbox",
-            "attachments": [],
-            "has_attachments": False,
-            "processed": False,
-        },
+        IndexEmailMetadata(
+            email_id="123",
+            subject="Test",
+            from_address="test@example.com",
+            to_addresses=[],
+            date="2024-01-01",
+            folder="inbox",
+            attachments=[],
+            has_attachments=False,
+            processed=False,
+        ),
     )
 
     folders = index_manager.get_folders()

@@ -1,6 +1,6 @@
 """Tests for Gmail retriever functionality."""
 
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -422,7 +422,6 @@ def test_parse_email_with_attachments():
     retriever = GmailRetriever(username="test@example.com", password="password123")
 
     # Create a mock email message with attachments
-    from email.message import Message
     from email.mime.application import MIMEApplication
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
@@ -458,7 +457,6 @@ def test_parse_email_multipart_without_attachment():
     retriever = GmailRetriever(username="test@example.com", password="password123")
 
     # Create a mock email message with multipart but no attachments
-    from email.message import Message
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
 

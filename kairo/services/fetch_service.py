@@ -31,11 +31,10 @@ class EmailProcessor:
         index = self.storage.load_index(str(account_name))
 
         metadata = self.retriever.get_email_metadata(email_data)
-        metadata_dict = metadata.dict()
 
         email_already_in_index = index.is_email_processed(folder, email_id)
         if not email_already_in_index:
-            index.add(folder, metadata_dict)
+            index.add(folder, metadata)
 
         self.storage.save_index(str(account_name), index)
 
@@ -70,11 +69,11 @@ class AccountFinder:
                 return None, None
             return account, account_config
         else:
-            accounts = self.config.data.get("accounts", {})
+            accounts = self.config.data.accounts
             matching_accounts: List[Tuple[str, AccountConfig]] = []
 
             for name, acc in accounts.items():
-                if acc.get("provider") == provider or name == provider:
+                if acc.provider == provider or name == provider:
                     matching_accounts.append((name, acc))
 
             if not matching_accounts:
@@ -104,16 +103,16 @@ class GmailAuthenticator:
         self, account: str, account_config: AccountConfig
     ) -> GmailRetriever | None:
         """Handle Gmail authentication and return retriever."""
-        username = account_config.get("username")
-        password = account_config.get("password")
-        access_token = account_config.get("access_token")
+        username = account_config.username
+        password = account_config.password
+        access_token = account_config.access_token
 
         if not username:
             click.echo("Error: Username not configured for account", err=True)
             return None
 
-        client_id = account_config.get("client_id")
-        client_secret = account_config.get("client_secret")
+        client_id = account_config.client_id
+        client_secret = account_config.client_secret
 
         if access_token:
             click.echo("Using OAuth2 authentication with existing token")
@@ -160,10 +159,19 @@ class GmailAuthenticator:
 
                 click.echo("✅ OAuth2 authentication successful!")
 
-                account_config["access_token"] = access_token
-                if refresh_token:
-                    account_config["refresh_token"] = refresh_token
-                self.config.set_account(account, account_config)
+                # Create a new account config with updated tokens
+                updated_account_config = AccountConfig(
+                    provider=account_config.provider,
+                    username=account_config.username,
+                    password=account_config.password,
+                    access_token=access_token,
+                    client_id=account_config.client_id,
+                    client_secret=account_config.client_secret,
+                    server=account_config.server,
+                    refresh_token=refresh_token or account_config.refresh_token,
+                    port=account_config.port,
+                )
+                self.config.set_account(account, updated_account_config)
                 self.config.save()
 
                 return GmailRetriever(username=username, access_token=access_token)
@@ -226,7 +234,7 @@ class EmailFetchService:
                 processed_count = 0
 
                 click.echo(
-                    f"Connecting to Gmail for account: {account_config.get('username')}"
+                    f"Connecting to Gmail for account: {account_config.username}"
                 )
 
                 emails = retriever.fetch_emails(folder=folder.upper())
