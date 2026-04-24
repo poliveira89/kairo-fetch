@@ -10,7 +10,7 @@ from pydantic import BaseModel
 class AccountConfig(BaseModel):
     """Account configuration."""
 
-    provider: str
+    provider: str | None = None
     username: str
     password: str | None = None
     access_token: str | None = None
@@ -78,7 +78,9 @@ class Config:
     def save(self) -> None:
         """Save configuration to file."""
         with open(self.config_path, "w") as f:
-            json.dump(self.data, f, indent=2)
+            # Convert Pydantic model to dict for JSON serialization
+            data_dict = self.data.dict()
+            json.dump(data_dict, f, indent=2)
 
     def get_account(self, account_name: str) -> AccountConfig | None:
         """Get account configuration."""
