@@ -1,11 +1,10 @@
 """Tests for storage functionality."""
 
-import os
 import tempfile
 from pathlib import Path
 
 from kairo.models import EmailMetadata
-from kairo.storage import IndexManager, StorageManager
+from kairo.storage import IndexEmailMetadata, IndexManager, StorageManager
 
 
 def test_storage_manager_initialization():
@@ -323,3 +322,208 @@ def test_attachment_storage():
 
         assert retrieved_content == attachment_content
         assert attachment_path.exists()
+
+
+def test_index_manager_to_dict():
+    """Test IndexManager to_dict method."""
+    index_manager = IndexManager.create_empty()
+    index_dict = index_manager.to_dict()
+    assert index_dict == {"folders": {}}
+
+
+def test_index_manager_load_from_dict():
+    """Test IndexManager load_from_dict method."""
+    index_dict = {
+        "folders": {
+            "inbox": [
+                {
+                    "email_id": "123",
+                    "subject": "Test Email",
+                    "from_address": "test@example.com",
+                    "to_addresses": ["recipient@example.com"],
+                    "date": "2024-01-01",
+                    "folder": "inbox",
+                    "attachments": [],
+                    "has_attachments": False,
+                    "processed": False,
+                }
+            ]
+        }
+    }
+    index_manager = IndexManager.load_from_dict(index_dict)
+    assert index_manager.to_dict() == index_dict
+
+
+def test_index_manager_add_update():
+    """Test IndexManager add method updates existing email."""
+    index_manager = IndexManager.create_empty()
+
+    # Add initial email
+    email_metadata: IndexEmailMetadata = {
+        "email_id": "123",
+        "subject": "Original Subject",
+        "from_address": "test@example.com",
+        "to_addresses": ["recipient@example.com"],
+        "date": "2024-01-01",
+        "folder": "inbox",
+        "attachments": [],
+        "has_attachments": False,
+        "processed": False,
+    }
+    index_manager.add("inbox", email_metadata)
+
+    # Update the same email
+    updated_metadata: IndexEmailMetadata = {
+        "email_id": "123",
+        "subject": "Updated Subject",
+        "from_address": "test@example.com",
+        "to_addresses": ["recipient@example.com"],
+        "date": "2024-01-01",
+        "folder": "inbox",
+        "attachments": [],
+        "has_attachments": False,
+        "processed": True,
+    }
+    index_manager.add("inbox", updated_metadata)
+
+    # Verify update
+    emails = index_manager.get_emails_in_folder("inbox")
+    assert len(emails) == 1
+    assert emails[0]["subject"] == "Updated Subject"
+    assert emails[0]["processed"] is True
+
+
+def test_index_manager_mark_email_as_processed():
+    """Test IndexManager mark_email_as_processed method."""
+    index_manager = IndexManager.create_empty()
+
+    # Add email
+    email_metadata: IndexEmailMetadata = {
+        "email_id": "123",
+        "subject": "Test Email",
+        "from_address": "test@example.com",
+        "to_addresses": ["recipient@example.com"],
+        "date": "2024-01-01",
+        "folder": "inbox",
+        "attachments": [],
+        "has_attachments": False,
+        "processed": False,
+    }
+    index_manager.add("inbox", email_metadata)
+
+    # Mark as processed
+    result = index_manager.mark_email_as_processed("inbox", "123")
+    assert result is True
+
+    # Verify it was marked as processed
+    emails = index_manager.get_emails_in_folder("inbox")
+    assert emails[0]["processed"] is True
+
+
+def test_index_manager_mark_nonexistent_email():
+    """Test IndexManager mark_email_as_processed with non-existent email."""
+    index_manager = IndexManager.create_empty()
+    result = index_manager.mark_email_as_processed("inbox", "999")
+    assert result is False
+
+
+def test_index_manager_get_unprocessed_emails():
+    """Test IndexManager get_unprocessed_emails method."""
+    index_manager = IndexManager.create_empty()
+
+    # Add processed and unprocessed emails
+    processed_email: IndexEmailMetadata = {
+        "email_id": "123",
+        "subject": "Processed Email",
+        "from_address": "test@example.com",
+        "to_addresses": ["recipient@example.com"],
+        "date": "2024-01-01",
+        "folder": "inbox",
+        "attachments": [],
+        "has_attachments": False,
+        "processed": True,
+    }
+    unprocessed_email: IndexEmailMetadata = {
+        "email_id": "456",
+        "subject": "Unprocessed Email",
+        "from_address": "test@example.com",
+        "to_addresses": ["recipient@example.com"],
+        "date": "2024-01-01",
+        "folder": "inbox",
+        "attachments": [],
+        "has_attachments": False,
+        "processed": False,
+    }
+    index_manager.add("inbox", processed_email)
+    index_manager.add("inbox", unprocessed_email)
+
+    # Get unprocessed emails
+    unprocessed = index_manager.get_unprocessed_emails("inbox")
+    assert len(unprocessed) == 1
+    assert unprocessed[0]["email_id"] == "456"
+    assert unprocessed[0]["processed"] is False
+
+
+def test_index_manager_ensure_folder_exists():
+    """Test IndexManager ensure_folder_exists method."""
+    index_manager = IndexManager.create_empty()
+
+    # Ensure folder exists
+    index_manager.ensure_folder_exists("new_folder")
+    assert "new_folder" in index_manager.to_dict()["folders"]
+    assert index_manager.to_dict()["folders"]["new_folder"] == []
+
+
+def test_index_manager_get_folders():
+    """Test IndexManager get_folders method."""
+    index_manager = IndexManager.create_empty()
+
+    # Add emails to different folders
+    index_manager.add(
+        "inbox",
+        {
+            "email_id": "123",
+            "subject": "Test",
+            "from_address": "test@example.com",
+            "to_addresses": [],
+            "date": "2024-01-01",
+            "folder": "inbox",
+            "attachments": [],
+            "has_attachments": False,
+            "processed": False,
+        },
+    )
+
+    folders = index_manager.get_folders()
+    assert "inbox" in folders
+    assert len(folders["inbox"]) == 1
+
+
+def test_index_manager_get_folder():
+    """Test IndexManager get_folder method."""
+    index_manager = IndexManager.create_empty()
+
+    # Get folder that doesn't exist (should create it)
+    folder = index_manager.get_folder("new_folder")
+    assert folder == []
+    assert "new_folder" in index_manager.to_dict()["folders"]
+
+
+def test_storage_manager_repr():
+    """Test StorageManager __repr__ method."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        storage = StorageManager(temp_dir)
+        repr_str = repr(storage)
+        assert "StorageManager(" in repr_str
+        assert "base_path=" in repr_str
+        assert ")" in repr_str
+
+
+def test_index_manager_load_from_dict_with_missing_folders():
+    """Test IndexManager.load_from_dict with missing folders key."""
+    # Test the case where index_dict doesn't have 'folders' key
+    index_dict = {}  # Missing 'folders' key
+    index_manager = IndexManager.load_from_dict(index_dict)
+
+    # Should create empty folders dict
+    assert index_manager.to_dict() == {"folders": {}}

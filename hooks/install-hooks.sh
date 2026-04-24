@@ -23,10 +23,19 @@ fi
 
 # Run linting
 if make lint; then
-    echo "✅ All checks passed!"
+    echo "✅ All format checks passed!"
     exit 0
 else
     echo "❌ Linting failed. Please fix the issues before committing."
+    exit 1
+fi
+
+# Run check
+if make check; then
+    echo "✅ All syntax checks passed!"
+    exit 0
+else
+    echo "❌ Syntax failed. Please fix the issues before committing."
     exit 1
 fi
 EOF
