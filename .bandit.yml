@@ -1,0 +1,7 @@
+skips:
+  - B101
+
+per_file_ignores:
+  "src/*": []
+  "tests/*":
+    - B101
