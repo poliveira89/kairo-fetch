@@ -195,7 +195,7 @@ def test_fetch_command_with_oauth2_config():
     """Test fetch command with OAuth2 configuration."""
     runner = CliRunner()
 
-    # Create a temporary config file with OAuth2 credentials
+    # Create a temporary config file with OAuth2 credentials and access token
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
         config_content = {
             "accounts": {
@@ -204,6 +204,7 @@ def test_fetch_command_with_oauth2_config():
                     "username": "test@example.com",
                     "client_id": "test_client_id",
                     "client_secret": "test_client_secret",
+                    "access_token": "test_access_token",
                     "port": 993,
                 }
             },
@@ -217,7 +218,7 @@ def test_fetch_command_with_oauth2_config():
         with patch("kairo.config.Config._get_default_config_path") as mock_config_path:
             mock_config_path.return_value = Path(config_file)
 
-            # This would normally trigger OAuth2 flow, but we'll just test the setup
+            # This should use existing access token and skip OAuth2 flow
             result = runner.invoke(
                 cli,
                 [
@@ -233,9 +234,9 @@ def test_fetch_command_with_oauth2_config():
                 ],
             )
 
-        # Should attempt OAuth2 flow (will fail without real credentials)
+        # Should use existing OAuth2 token (will fail connecting but won't hang)
         assert result.exit_code == 0
-        assert "Performing OAuth2 authentication flow" in result.output
+        assert "Using OAuth2 authentication with existing token" in result.output
 
     finally:
         os.unlink(config_file)
