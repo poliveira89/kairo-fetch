@@ -218,7 +218,6 @@ def test_fetch_command_with_oauth2_config():
         with patch("kairo.config.Config._get_default_config_path") as mock_config_path:
             mock_config_path.return_value = Path(config_file)
 
-            # This should use existing access token and skip OAuth2 flow
             result = runner.invoke(
                 cli,
                 [
@@ -234,7 +233,6 @@ def test_fetch_command_with_oauth2_config():
                 ],
             )
 
-        # Should use existing OAuth2 token (will fail connecting but won't hang)
         assert result.exit_code == 0
         assert "Using OAuth2 authentication with existing token" in result.output
 
