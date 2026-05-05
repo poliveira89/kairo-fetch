@@ -255,3 +255,6 @@ def test_storage_edge_cases():
         long_email_id = "a" * 300
         email_path = storage.get_email_path("test", "inbox", long_email_id)
         assert long_email_id in str(email_path)
+
+        # Use storage to verify it was created properly
+        assert storage.base_path == Path(temp_dir)
