@@ -257,4 +257,4 @@ def test_storage_edge_cases():
         assert long_email_id in str(email_path)
 
         # Use storage to verify it was created properly
-        assert storage.base_path == Path(temp_dir)
+        assert storage.base_path == Path(temp_dir)  # nosec
