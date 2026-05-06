@@ -1,7 +1,5 @@
 """CLI interface for email-fetch tool."""
 
-import sys
-
 import click
 
 from .config import Config
@@ -76,4 +74,4 @@ def init() -> None:
 
 
 if __name__ == "__main__":
-    cli(sys.argv[1:])
+    cli()
