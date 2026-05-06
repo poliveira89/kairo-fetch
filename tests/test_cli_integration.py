@@ -47,6 +47,20 @@ def config_content_no_access_token():
 
 
 @fixture
+def config_content_basic():
+    return {
+        "accounts": {
+            "test_account": {
+                "provider": "gmail",
+                "username": "test@example.com",
+                "password": "test_password",
+            }
+        },
+        "storage": {"path": "/tmp/test_storage"},
+    }
+
+
+@fixture
 def cli_args():
     return [
         "fetch",
@@ -61,23 +75,13 @@ def cli_args():
     ]
 
 
-def test_fetch_command_with_mock_config():
+def test_fetch_command_with_mock_config(config_content_basic):
     """Test fetch command with a mock configuration."""
     runner = CliRunner()
 
     # Create a temporary config file
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
-        config_content = {
-            "accounts": {
-                "test_account": {
-                    "provider": "gmail",
-                    "username": "test@example.com",
-                    "password": "test_password",
-                }
-            },
-            "storage": {"path": "/tmp/test_storage"},
-        }
-        json.dump(config_content, f)
+        json.dump(config_content_basic, f)
         config_file = f.name
 
     try:
@@ -667,7 +671,7 @@ def test_account_finder_validate_imap_requirements():
     assert result is True
 
 
-def test_account_finder_find_account_config():
+def test_account_finder_find_account_config(config_content_basic):
     """Test AccountFinder find_account_config method."""
     import json
     import tempfile
@@ -678,17 +682,7 @@ def test_account_finder_find_account_config():
 
     # Create a temporary config file
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
-        config_content = {
-            "accounts": {
-                "test_account": {
-                    "provider": "gmail",
-                    "username": "test@example.com",
-                    "password": "test_password",
-                }
-            },
-            "storage": {"path": "/tmp/test_storage"},
-        }
-        json.dump(config_content, f)
+        json.dump(config_content_basic, f)
         config_file = f.name
 
     try:
@@ -719,7 +713,7 @@ def test_account_finder_find_account_config():
         Path(config_file).unlink()
 
 
-def test_gmail_authenticator_authenticate():
+def test_gmail_authenticator_authenticate(config_content_basic):
     """Test GmailAuthenticator authenticate method."""
     import json
     import tempfile
@@ -730,17 +724,7 @@ def test_gmail_authenticator_authenticate():
 
     # Create a temporary config file
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
-        config_content = {
-            "accounts": {
-                "test_account": {
-                    "provider": "gmail",
-                    "username": "test@example.com",
-                    "password": "test_password",
-                }
-            },
-            "storage": {"path": "/tmp/test_storage"},
-        }
-        json.dump(config_content, f)
+        json.dump(config_content_basic, f)
         config_file = f.name
 
     try:
@@ -759,7 +743,7 @@ def test_gmail_authenticator_authenticate():
         Path(config_file).unlink()
 
 
-def test_email_fetch_service_process_emails():
+def test_email_fetch_service_process_emails(config_content_basic):
     """Test EmailFetchService email processing logic."""
     import json
     import tempfile
@@ -771,17 +755,7 @@ def test_email_fetch_service_process_emails():
 
     # Create a temporary config file
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
-        config_content = {
-            "accounts": {
-                "test_account": {
-                    "provider": "gmail",
-                    "username": "test@example.com",
-                    "password": "test_password",
-                }
-            },
-            "storage": {"path": "/tmp/test_storage"},
-        }
-        json.dump(config_content, f)
+        json.dump(config_content_basic, f)
         config_file = f.name
 
     try:
@@ -865,7 +839,7 @@ def test_email_fetch_service_process_emails():
         Path(config_file).unlink()
 
 
-def test_email_fetch_service_empty_emails():
+def test_email_fetch_service_empty_emails(config_content_basic):
     """Test EmailFetchService with no emails."""
     import json
     import tempfile
@@ -877,17 +851,7 @@ def test_email_fetch_service_empty_emails():
 
     # Create a temporary config file
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
-        config_content = {
-            "accounts": {
-                "test_account": {
-                    "provider": "gmail",
-                    "username": "test@example.com",
-                    "password": "test_password",
-                }
-            },
-            "storage": {"path": "/tmp/test_storage"},
-        }
-        json.dump(config_content, f)
+        json.dump(config_content_basic, f)
         config_file = f.name
 
     try:
@@ -919,7 +883,7 @@ def test_email_fetch_service_empty_emails():
         Path(config_file).unlink()
 
 
-def test_email_fetch_service_processed_emails():
+def test_email_fetch_service_processed_emails(config_content_basic):
     """Test EmailFetchService with already processed emails."""
     import json
     import tempfile
@@ -931,17 +895,7 @@ def test_email_fetch_service_processed_emails():
 
     # Create a temporary config file
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
-        config_content = {
-            "accounts": {
-                "test_account": {
-                    "provider": "gmail",
-                    "username": "test@example.com",
-                    "password": "test_password",
-                }
-            },
-            "storage": {"path": "/tmp/test_storage"},
-        }
-        json.dump(config_content, f)
+        json.dump(config_content_basic, f)
         config_file = f.name
 
     try:
@@ -999,7 +953,7 @@ def test_email_fetch_service_processed_emails():
         Path(config_file).unlink()
 
 
-def test_email_fetch_service_limit_reached():
+def test_email_fetch_service_limit_reached(config_content_basic):
     """Test EmailFetchService when limit is reached."""
     import json
     import tempfile
@@ -1011,17 +965,7 @@ def test_email_fetch_service_limit_reached():
 
     # Create a temporary config file
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
-        config_content = {
-            "accounts": {
-                "test_account": {
-                    "provider": "gmail",
-                    "username": "test@example.com",
-                    "password": "test_password",
-                }
-            },
-            "storage": {"path": "/tmp/test_storage"},
-        }
-        json.dump(config_content, f)
+        json.dump(config_content_basic, f)
         config_file = f.name
 
     try:
