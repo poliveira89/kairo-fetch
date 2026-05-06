@@ -21,6 +21,32 @@ pytest = "^7.4.0"
 basedpyright = "^1.13.0"
 bandit = "^1.9.4"
 
+[tool.black]
+line-length = 88
+exclude = '''
+/(
+    \.git
+    | \.venv
+    | venv
+    | htmlcov
+    | \.pytest_cache
+    | \.mypy_cache
+    | __pycache__
+    | vibe-scratchpad-.*
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 88
+skip = [".venv", "venv", "htmlcov", "vibe-scratchpad-*"]
+
+[tool.basedpyright]
+typeCheckingMode = "basic"
+pythonVersion = "3.12"
+include = ["kairo", "tests"]
+exclude = ["**/vibe-scratchpad-*"]
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

@@ -55,7 +55,7 @@ format:
 PHONY: check
 check:
 	@echo "Review code..."
-	. venv/bin/activate && basedpyright .
+	. venv/bin/activate && basedpyright --project .
 
 PHONY: run
 run:
