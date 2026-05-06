@@ -11,6 +11,13 @@ from pytest import fixture
 
 from kairo.cli import cli
 from kairo.config import Config
+from kairo.services.fetch_service import (
+    AccountFinder,
+    EmailFetchService,
+    EmailProcessor,
+    GmailAuthenticator,
+)
+from kairo.storage import StorageManager
 
 
 @fixture
@@ -594,11 +601,6 @@ def test_init_service_initialize():
 
 def test_email_processor_process_email():
     """Test EmailProcessor process_email method."""
-    import tempfile
-
-    from kairo.services.fetch_service import EmailProcessor
-    from kairo.storage import StorageManager
-
     with tempfile.TemporaryDirectory() as temp_dir:
         storage = StorageManager(temp_dir)
 
@@ -673,14 +675,6 @@ def test_account_finder_validate_imap_requirements():
 
 def test_account_finder_find_account_config(config_content_basic):
     """Test AccountFinder find_account_config method."""
-    import json
-    import tempfile
-    from pathlib import Path
-
-    from kairo.config import Config
-    from kairo.services.fetch_service import AccountFinder
-
-    # Create a temporary config file
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
         json.dump(config_content_basic, f)
         config_file = f.name
@@ -715,14 +709,6 @@ def test_account_finder_find_account_config(config_content_basic):
 
 def test_gmail_authenticator_authenticate(config_content_basic):
     """Test GmailAuthenticator authenticate method."""
-    import json
-    import tempfile
-    from pathlib import Path
-
-    from kairo.config import Config
-    from kairo.services.fetch_service import GmailAuthenticator
-
-    # Create a temporary config file
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
         json.dump(config_content_basic, f)
         config_file = f.name
@@ -745,15 +731,6 @@ def test_gmail_authenticator_authenticate(config_content_basic):
 
 def test_email_fetch_service_process_emails(config_content_basic):
     """Test EmailFetchService email processing logic."""
-    import json
-    import tempfile
-    from pathlib import Path
-    from unittest.mock import MagicMock, patch
-
-    from kairo.config import Config
-    from kairo.services.fetch_service import EmailFetchService
-
-    # Create a temporary config file
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
         json.dump(config_content_basic, f)
         config_file = f.name
@@ -841,13 +818,6 @@ def test_email_fetch_service_process_emails(config_content_basic):
 
 def test_email_fetch_service_empty_emails(config_content_basic):
     """Test EmailFetchService with no emails."""
-    import json
-    import tempfile
-    from pathlib import Path
-    from unittest.mock import MagicMock, patch
-
-    from kairo.config import Config
-    from kairo.services.fetch_service import EmailFetchService
 
     # Create a temporary config file
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
@@ -885,15 +855,6 @@ def test_email_fetch_service_empty_emails(config_content_basic):
 
 def test_email_fetch_service_processed_emails(config_content_basic):
     """Test EmailFetchService with already processed emails."""
-    import json
-    import tempfile
-    from pathlib import Path
-    from unittest.mock import MagicMock, patch
-
-    from kairo.config import Config
-    from kairo.services.fetch_service import EmailFetchService
-
-    # Create a temporary config file
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
         json.dump(config_content_basic, f)
         config_file = f.name
@@ -955,15 +916,6 @@ def test_email_fetch_service_processed_emails(config_content_basic):
 
 def test_email_fetch_service_limit_reached(config_content_basic):
     """Test EmailFetchService when limit is reached."""
-    import json
-    import tempfile
-    from pathlib import Path
-    from unittest.mock import MagicMock, patch
-
-    from kairo.config import Config
-    from kairo.services.fetch_service import EmailFetchService
-
-    # Create a temporary config file
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
         json.dump(config_content_basic, f)
         config_file = f.name
@@ -1032,15 +984,6 @@ def test_email_fetch_service_limit_reached(config_content_basic):
 
 def test_email_fetch_service_imap_provider():
     """Test EmailFetchService with IMAP provider."""
-    import json
-    import tempfile
-    from pathlib import Path
-    from unittest.mock import patch
-
-    from kairo.config import Config
-    from kairo.services.fetch_service import EmailFetchService
-
-    # Create a temporary config file
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
         config_content = {
             "accounts": {
