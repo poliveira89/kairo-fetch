@@ -14,6 +14,7 @@ from kairo.config import Config
 from kairo.models import EmailMetadata
 from kairo.retrievers.gmail import GmailRetriever
 from kairo.storage import StorageManager
+from tests.conftest import assert_raises_on_connect
 
 
 def test_config_file_not_found():
@@ -224,15 +225,13 @@ def test_cli_error_output():
     assert "no such option" in result.output.lower()
 
 
-def test_gmail_retriever_edge_cases():
-    """Test Gmail retriever edge cases."""
+def test_gmail_retriever_empty_username():
+    """Test empty username raises ValueError."""
+    assert_raises_on_connect(GmailRetriever, username="")
 
-    # Test with empty username
-    with pytest.raises(ValueError):
-        retriever = GmailRetriever(username="")
-        retriever.connect()
 
-    # Test with very long username
+def test_gmail_retriever_long_username():
+    """Test long username is stored correctly."""
     long_username = "a" * 300 + "@example.com"
     retriever = GmailRetriever(username=long_username, password="password")
     assert retriever.username == long_username

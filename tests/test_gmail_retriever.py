@@ -6,17 +6,19 @@ import pytest
 
 from kairo.models import EmailMetadata
 from kairo.retrievers.gmail import GmailRetriever
+from tests.conftest import assert_raises_on_connect
 
 
-def test_gmail_retriever_initialization():
-    """Test GmailRetriever initialization with different auth methods."""
-    # Test password authentication
+def test_gmail_retriever_basic_auth():
+    """Test GmailRetriever initialization with username and password."""
     retriever = GmailRetriever(username="test@example.com", password="password123")
     assert retriever.username == "test@example.com"
     assert retriever.password == "password123"
     assert retriever.access_token is None
 
-    # Test OAuth2 authentication
+
+def test_gmail_retriever_oauth2():
+    """Test GmailRetriever initialization with username and access token."""
     retriever_oauth = GmailRetriever(
         username="test@example.com", access_token="token123"
     )
@@ -160,15 +162,13 @@ def test_gmail_connection_error(mock_imap):
         retriever.connect()
 
 
-def test_gmail_retriever_edge_cases():
-    """Test Gmail retriever edge cases."""
+def test_gmail_retriever_empty_username():
+    """Test empty username raises ValueError."""
+    assert_raises_on_connect(GmailRetriever, username="")
 
-    # Test with empty username
-    with pytest.raises(ValueError):
-        retriever = GmailRetriever(username="")
-        retriever.connect()
 
-    # Test with very long username
+def test_gmail_retriever_long_username():
+    """Test long username is stored correctly."""
     long_username = "a" * 300 + "@example.com"
     retriever = GmailRetriever(username=long_username, password="password")
     assert retriever.username == long_username

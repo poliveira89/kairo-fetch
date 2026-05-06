@@ -7,9 +7,42 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
+from pytest import fixture
 
 from kairo.cli import cli
 from kairo.config import Config
+
+
+@fixture
+def config_content():
+    return {
+        "accounts": {
+            "test_account": {
+                "provider": "gmail",
+                "username": "test@example.com",
+                "client_id": "test_client_id",
+                "client_secret": "test_client_secret",
+                "access_token": "test_access_token",
+                "port": 993,
+            }
+        },
+        "storage": {"path": "/tmp/test_storage"},
+    }
+
+
+@fixture
+def cli_args():
+    return [
+        "fetch",
+        "--provider",
+        "gmail",
+        "--account",
+        "test_account",
+        "--folder",
+        "inbox",
+        "--limit",
+        "1",
+    ]
 
 
 def test_fetch_command_with_mock_config():
@@ -191,46 +224,21 @@ def test_fetch_command_imap_requires_server():
     assert "server is required for IMAP provider" in result.output
 
 
-def test_fetch_command_with_oauth2_config():
+def test_fetch_command_with_oauth2_config(config_content, cli_args):
     """Test fetch command with OAuth2 configuration."""
     runner = CliRunner()
 
-    # Create a temporary config file with OAuth2 credentials and access token
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
-        config_content = {
-            "accounts": {
-                "test_account": {
-                    "provider": "gmail",
-                    "username": "test@example.com",
-                    "client_id": "test_client_id",
-                    "client_secret": "test_client_secret",
-                    "access_token": "test_access_token",
-                    "port": 993,
-                }
-            },
-            "storage": {"path": "/tmp/test_storage"},
-        }
         json.dump(config_content, f)
         config_file = f.name
 
     try:
-        # Mock the config to use our test file
         with patch("kairo.config.Config._get_default_config_path") as mock_config_path:
             mock_config_path.return_value = Path(config_file)
 
             result = runner.invoke(
                 cli,
-                [
-                    "fetch",
-                    "--provider",
-                    "gmail",
-                    "--account",
-                    "test_account",
-                    "--folder",
-                    "inbox",
-                    "--limit",
-                    "1",
-                ],
+                cli_args,
             )
 
         assert result.exit_code == 0
@@ -265,11 +273,10 @@ def test_error_handling_in_fetch():
         assert "Error" in result.output or "not found" in result.output
 
 
-def test_storage_integration():
+def test_storage_integration(cli_args):
     """Test storage integration in fetch command."""
     runner = CliRunner()
 
-    # Create a temporary config and storage directory
     with tempfile.TemporaryDirectory() as temp_dir:
         config_file = os.path.join(temp_dir, "config.json")
         storage_dir = os.path.join(temp_dir, "storage")
@@ -287,23 +294,12 @@ def test_storage_integration():
             }
             json.dump(config_content, f)
 
-        # Mock the config to use our test file
         with patch("kairo.config.Config._get_default_config_path") as mock_config_path:
             mock_config_path.return_value = Path(config_file)
 
             result = runner.invoke(
                 cli,
-                [
-                    "fetch",
-                    "--provider",
-                    "gmail",
-                    "--account",
-                    "test_account",
-                    "--folder",
-                    "inbox",
-                    "--limit",
-                    "1",
-                ],
+                cli_args,
             )
 
             # Should attempt to fetch (will fail with auth error)
@@ -358,7 +354,7 @@ def test_multiple_accounts_selection(mock_config_path):
 @patch("urllib.request.urlopen")
 @patch("urllib.request.Request")
 @patch("kairo.config.Config._get_default_config_path")
-def test_oauth2_flow_success(mock_config_path, _, mock_urlopen):
+def test_oauth2_flow_success(mock_config_path, _, mock_urlopen, cli_args):
     """Test successful OAuth2 flow."""
     runner = CliRunner()
 
@@ -394,17 +390,7 @@ def test_oauth2_flow_success(mock_config_path, _, mock_urlopen):
         with patch("click.prompt", return_value="test_auth_code"):
             result = runner.invoke(
                 cli,
-                [
-                    "fetch",
-                    "--provider",
-                    "gmail",
-                    "--account",
-                    "test_account",
-                    "--folder",
-                    "inbox",
-                    "--limit",
-                    "1",
-                ],
+                cli_args,
             )
 
         # Should show successful OAuth2 flow
@@ -431,7 +417,7 @@ def test_oauth2_flow_success(mock_config_path, _, mock_urlopen):
 
 @patch("urllib.request.urlopen")
 @patch("kairo.config.Config._get_default_config_path")
-def test_oauth2_flow_failure(mock_config_path, mock_urlopen):
+def test_oauth2_flow_failure(mock_config_path, mock_urlopen, cli_args):
     """Test OAuth2 flow failure."""
     runner = CliRunner()
 
@@ -462,17 +448,7 @@ def test_oauth2_flow_failure(mock_config_path, mock_urlopen):
         with patch("click.prompt", return_value="test_auth_code"):
             result = runner.invoke(
                 cli,
-                [
-                    "fetch",
-                    "--provider",
-                    "gmail",
-                    "--account",
-                    "test_account",
-                    "--folder",
-                    "inbox",
-                    "--limit",
-                    "1",
-                ],
+                cli_args,
             )
 
         # Should show OAuth2 failure
