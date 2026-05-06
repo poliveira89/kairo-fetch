@@ -31,6 +31,22 @@ def config_content():
 
 
 @fixture
+def config_content_no_access_token():
+    return {
+        "accounts": {
+            "test_account": {
+                "provider": "gmail",
+                "username": "test@example.com",
+                "client_id": "test_client_id",
+                "client_secret": "test_client_secret",
+                "port": 993,
+            }
+        },
+        "storage": {"path": "/tmp/test_storage"},
+    }
+
+
+@fixture
 def cli_args():
     return [
         "fetch",
@@ -354,25 +370,14 @@ def test_multiple_accounts_selection(mock_config_path):
 @patch("urllib.request.urlopen")
 @patch("urllib.request.Request")
 @patch("kairo.config.Config._get_default_config_path")
-def test_oauth2_flow_success(mock_config_path, _, mock_urlopen, cli_args):
+def test_oauth2_flow_success(
+    mock_config_path, _, mock_urlopen, config_content_no_access_token, cli_args
+):
     """Test successful OAuth2 flow."""
     runner = CliRunner()
 
-    # Create a temporary config with OAuth2 credentials
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
-        config_content = {
-            "accounts": {
-                "test_account": {
-                    "provider": "gmail",
-                    "username": "test@example.com",
-                    "client_id": "test_client_id",
-                    "client_secret": "test_client_secret",
-                    "port": 993,
-                }
-            },
-            "storage": {"path": "/tmp/test_storage"},
-        }
-        json.dump(config_content, f)
+        json.dump(config_content_no_access_token, f)
         config_file = f.name
 
     try:
@@ -417,24 +422,14 @@ def test_oauth2_flow_success(mock_config_path, _, mock_urlopen, cli_args):
 
 @patch("urllib.request.urlopen")
 @patch("kairo.config.Config._get_default_config_path")
-def test_oauth2_flow_failure(mock_config_path, mock_urlopen, cli_args):
+def test_oauth2_flow_failure(
+    mock_config_path, mock_urlopen, config_content_no_access_token, cli_args
+):
     """Test OAuth2 flow failure."""
     runner = CliRunner()
 
-    # Create a temporary config with OAuth2 credentials
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
-        config_content = {
-            "accounts": {
-                "test_account": {
-                    "provider": "gmail",
-                    "username": "test@example.com",
-                    "client_id": "test_client_id",
-                    "client_secret": "test_client_secret",
-                }
-            },
-            "storage": {"path": "/tmp/test_storage"},
-        }
-        json.dump(config_content, f)
+        json.dump(config_content_no_access_token, f)
         config_file = f.name
 
     try:
