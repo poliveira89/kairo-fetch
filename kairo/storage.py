@@ -6,7 +6,7 @@ from typing import Dict, List
 
 from pydantic import BaseModel
 
-from kairo import log
+from .logging import log
 
 
 class IndexEmailMetadata(BaseModel):
