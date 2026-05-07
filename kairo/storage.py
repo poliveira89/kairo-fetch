@@ -57,8 +57,13 @@ class IndexManager:
         for folder_name, emails in index_dict["folders"].items():
             validated_emails = []
             for email_data in emails:
+                if not isinstance(email_data, dict):
+                    log.warning(
+                        f"Skip invalid email: non-dict type {type(email_data).__name__}"
+                    )
+                    continue
+
                 try:
-                    # Try to create IndexEmailMetadata with all required fields
                     validated_email = IndexEmailMetadata(
                         email_id=email_data.get("email_id", ""),
                         from_address=email_data.get("from_address", ""),
@@ -72,9 +77,8 @@ class IndexManager:
                     )
                     validated_emails.append(validated_email)
                 except Exception as e:
-                    log.warning(
-                        f"Skip invalid email: {email_data.get('from_address', '')}"
-                    )
+                    from_address = email_data.get("from_address", "")
+                    log.warning(f"Skip invalid email: {from_address}")
                     log.debug(e)
                     continue
             validated_folders[folder_name] = validated_emails
