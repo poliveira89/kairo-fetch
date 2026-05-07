@@ -78,8 +78,7 @@ class IndexManager:
                     validated_emails.append(validated_email)
                 except Exception as e:
                     from_address = email_data.get("from_address", "")
-                    log.warning(f"Skip invalid email: {from_address}")
-                    log.debug(e)
+                    log.exception(f"Skip invalid email: {from_address}")
                     continue
             validated_folders[folder_name] = validated_emails
 
