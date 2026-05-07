@@ -15,47 +15,61 @@ class TestLoggingConfiguration:
     """Tests for logging configuration."""
 
     def test_logging_configuration(self):
-        """Test that logging configuration is correctly set up."""
-        setup_logging()
+        """Test that logging configuration is correctly set up with INFO level."""
+        old_stderr = sys.stderr
+        sys.stderr = StringIO()
 
-        handlers = list(log._core.handlers.values())
-        assert len(handlers) == 1
+        try:
+            setup_logging()
 
-        handler = handlers[0]
-        # Verify output stream is stderr
-        assert handler._sink._stream == sys.stderr
-        # Verify format by checking the formatter tokens
-        format_tokens = handler._formatter._tokens
-        expected_format = "{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}"
-        # Reconstruct format from tokens (excluding exception token added by loguru)
-        reconstructed = "".join(token[1] for token in format_tokens if token[1])
-        assert expected_format in reconstructed
-        # Verify default log level is INFO (20)
-        assert handler._levelno == 20
-        # Verify colorize
-        assert handler._colorize is True
+            log.debug("debug message")
+            log.info("info message")
+
+            output = sys.stderr.getvalue()
+            assert "debug message" not in output
+            assert "info message" in output
+            assert "| INFO |" in output
+        finally:
+            sys.stderr = old_stderr
+            log.remove()
 
     def test_logging_configuration_with_debug_level(self):
         """Test that logging can be configured with DEBUG level."""
-        setup_logging(level="DEBUG")
+        old_stderr = sys.stderr
+        sys.stderr = StringIO()
 
-        handlers = list(log._core.handlers.values())
-        assert len(handlers) == 1
+        try:
+            setup_logging(level="DEBUG")
 
-        handler = handlers[0]
-        # Verify log level is DEBUG (10)
-        assert handler._levelno == 10
+            log.debug("debug message")
+            log.info("info message")
+
+            output = sys.stderr.getvalue()
+            assert "debug message" in output
+            assert "info message" in output
+            assert "| DEBUG |" in output
+        finally:
+            sys.stderr = old_stderr
+            log.remove()
 
     def test_logging_configuration_with_warning_level(self):
         """Test that logging can be configured with WARNING level."""
-        setup_logging(level="WARNING")
+        old_stderr = sys.stderr
+        sys.stderr = StringIO()
 
-        handlers = list(log._core.handlers.values())
-        assert len(handlers) == 1
+        try:
+            setup_logging(level="WARNING")
 
-        handler = handlers[0]
-        # Verify log level is WARNING (30)
-        assert handler._levelno == 30
+            log.info("info message")
+            log.warning("warning message")
+
+            output = sys.stderr.getvalue()
+            assert "info message" not in output
+            assert "warning message" in output
+            assert "| WARNING |" in output
+        finally:
+            sys.stderr = old_stderr
+            log.remove()
 
     def test_logging_output_format(self):
         """Test that log messages are output with correct format."""
