@@ -76,7 +76,7 @@ class IndexManager:
                         processed=email_data.get("processed", False),
                     )
                     validated_emails.append(validated_email)
-                except Exception as e:
+                except Exception:
                     from_address = email_data.get("from_address", "")
                     log.exception(f"Skip invalid email: {from_address}")
                     continue

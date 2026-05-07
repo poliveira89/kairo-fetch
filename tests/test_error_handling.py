@@ -161,7 +161,7 @@ def test_storage_permission_error():
         try:
             # This should handle the permission error gracefully
             with pytest.raises(PermissionError):
-                storage = StorageManager(str(no_write_dir / "subdir"))
+                StorageManager(str(no_write_dir / "subdir"))
         finally:
             # Clean up
             no_write_dir.chmod(0o755)
