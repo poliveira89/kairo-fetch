@@ -6,6 +6,8 @@ from typing import Dict, List
 
 from pydantic import BaseModel
 
+from kairo import log
+
 
 class IndexEmailMetadata(BaseModel):
     """Email metadata stored in index."""
@@ -71,6 +73,9 @@ class IndexManager:
                     validated_emails.append(validated_email)
                 except Exception:
                     # Skip invalid emails for backward compatibility
+                    log.warning(
+                        f"Skip invalid email: {email_data.get('from_address', '')}"
+                    )
                     continue
             validated_folders[folder_name] = validated_emails
 

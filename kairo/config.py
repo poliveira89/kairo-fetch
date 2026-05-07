@@ -6,6 +6,8 @@ from typing import Dict
 
 from pydantic import BaseModel
 
+from kairo import log
+
 
 class AccountConfig(BaseModel):
     """Account configuration."""
@@ -63,8 +65,9 @@ class Config:
                 for account_name, account_data in data["accounts"].items():
                     try:
                         validated_accounts[account_name] = AccountConfig(**account_data)
-                    except Exception:
-                        # Skip invalid accounts for backward compatibility
+                    except Exception as e:
+                        log.warning(f"Skipping invalid account: {account_name}")
+                        log.debug(e)
                         continue
                 data["accounts"] = validated_accounts
 
