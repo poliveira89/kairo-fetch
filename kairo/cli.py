@@ -13,12 +13,33 @@ from .services.search_service import SearchService
 
 
 @click.group()
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    help="Enable verbose output (DEBUG level logging).",
+)
+@click.option(
+    "-q",
+    "--quiet",
+    is_flag=True,
+    help="Enable quiet mode (WARNING level logging).",
+)
 @click.pass_context
-def cli(ctx: click.Context) -> None:
+def cli(ctx: click.Context, verbose: bool, quiet: bool) -> None:
     """Email Fetch - Retrieve emails from Gmail and IMAP providers."""
     ctx.ensure_object(dict)
     ctx.obj["config"] = Config()
-    setup_logging()
+
+    # Determine log level based on flags
+    if verbose:
+        log_level = "DEBUG"
+    elif quiet:
+        log_level = "WARNING"
+    else:
+        log_level = "INFO"
+
+    setup_logging(log_level)
 
 
 @cli.command()
