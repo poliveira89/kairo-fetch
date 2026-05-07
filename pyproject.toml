@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "kairo-fetch"
-version = "0.1.1"
+version = "0.2.0"
 description = "CLI tool for fetching emails from Gmail and IMAP"
 authors = ["Your Name <your.email@example.com>"]
 readme = "README.md"
@@ -10,6 +10,7 @@ packages = [{include = "kairo"}]
 python = "^3.12"
 click = "^8.1.0"
 pydantic = "^1.10.0"
+loguru = "^0.7.0"
 
 [tool.poetry.scripts]
 kairo = "kairo.cli:cli"
