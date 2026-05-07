@@ -5,6 +5,7 @@ from sys import argv
 import click
 
 from .config import Config
+from .logging import setup_logging
 from .services.accounts_service import AccountsService
 from .services.fetch_service import FetchService
 from .services.init_service import InitService
@@ -17,6 +18,7 @@ def cli(ctx: click.Context) -> None:
     """Email Fetch - Retrieve emails from Gmail and IMAP providers."""
     ctx.ensure_object(dict)
     ctx.obj["config"] = Config()
+    setup_logging()
 
 
 @cli.command()

@@ -7,7 +7,7 @@ from io import StringIO
 from pathlib import Path
 
 from kairo.config import Config
-from kairo.logging import log
+from kairo.logging import log, setup_logging
 from kairo.storage import IndexManager
 
 
@@ -16,6 +16,7 @@ class TestLoggingConfiguration:
 
     def test_logging_configuration(self):
         """Test that logging configuration is correctly set up."""
+        setup_logging()
 
         handlers = list(log._core.handlers.values())
         assert len(handlers) == 1
@@ -36,6 +37,7 @@ class TestLoggingConfiguration:
 
     def test_logging_output_format(self):
         """Test that log messages are output with correct format."""
+        setup_logging()
 
         sink = StringIO()
         handler_id = log.add(
@@ -55,6 +57,7 @@ class TestLoggingConfiguration:
 
     def test_debug_suppressed_at_info_level(self):
         """Test that log.debug output is correctly suppressed when log level is INFO."""
+        setup_logging()
 
         sink = StringIO()
         # Add handler with INFO level (same as default)
@@ -81,6 +84,7 @@ class TestAccountConfigLogging:
 
     def test_account_config_invalid_data_logging(self):
         """Test that invalid AccountConfig (missing username) data triggers warning and debug logs."""
+        setup_logging()
 
         sink = StringIO()
         handler_id = log.add(
@@ -118,6 +122,7 @@ class TestIndexEmailMetadataLogging:
 
     def test_index_email_metadata_invalid_data_logging(self):
         """Test that invalid IndexEmailMetadata (bool as str) data triggers warning and debug logs."""
+        setup_logging()
 
         sink = StringIO()
         handler_id = log.add(
