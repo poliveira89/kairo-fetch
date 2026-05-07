@@ -65,7 +65,7 @@ class Config:
                 for account_name, account_data in data["accounts"].items():
                     try:
                         validated_accounts[account_name] = AccountConfig(**account_data)
-                    except Exception as e:
+                    except Exception:
                         log.exception(f"Skipping invalid account: {account_name}")
                         continue
                 data["accounts"] = validated_accounts
