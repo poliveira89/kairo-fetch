@@ -35,6 +35,28 @@ class TestLoggingConfiguration:
         # Verify colorize
         assert handler._colorize is True
 
+    def test_logging_configuration_with_debug_level(self):
+        """Test that logging can be configured with DEBUG level."""
+        setup_logging(level="DEBUG")
+
+        handlers = list(log._core.handlers.values())
+        assert len(handlers) == 1
+
+        handler = handlers[0]
+        # Verify log level is DEBUG (10)
+        assert handler._levelno == 10
+
+    def test_logging_configuration_with_warning_level(self):
+        """Test that logging can be configured with WARNING level."""
+        setup_logging(level="WARNING")
+
+        handlers = list(log._core.handlers.values())
+        assert len(handlers) == 1
+
+        handler = handlers[0]
+        # Verify log level is WARNING (30)
+        assert handler._levelno == 30
+
     def test_logging_output_format(self):
         """Test that log messages are output with correct format."""
         setup_logging()
