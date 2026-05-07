@@ -71,11 +71,11 @@ class IndexManager:
                         processed=email_data.get("processed", False),
                     )
                     validated_emails.append(validated_email)
-                except Exception:
-                    # Skip invalid emails for backward compatibility
+                except Exception as e:
                     log.warning(
                         f"Skip invalid email: {email_data.get('from_address', '')}"
                     )
+                    log.debug(e)
                     continue
             validated_folders[folder_name] = validated_emails
 
