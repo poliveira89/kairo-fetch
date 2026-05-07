@@ -1,6 +1,7 @@
 """Tests for logging functionality."""
 
 import json
+import sys
 import tempfile
 from io import StringIO
 from pathlib import Path
@@ -20,7 +21,17 @@ class TestLoggingConfiguration:
         assert len(handlers) == 1
 
         handler = handlers[0]
+        # Verify output stream is stderr
+        assert handler._sink._stream == sys.stderr
+        # Verify format by checking the formatter tokens
+        format_tokens = handler._formatter._tokens
+        expected_format = "{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}"
+        # Reconstruct format from tokens (excluding exception token added by loguru)
+        reconstructed = "".join(token[1] for token in format_tokens if token[1])
+        assert expected_format in reconstructed
+        # Verify default log level is INFO (20)
         assert handler._levelno == 20
+        # Verify colorize
         assert handler._colorize is True
 
     def test_logging_output_format(self):
@@ -39,6 +50,28 @@ class TestLoggingConfiguration:
             assert test_message in output
             assert "| INFO |" in output
             assert "Test log message" in output
+        finally:
+            log.remove(handler_id)
+
+    def test_debug_suppressed_at_info_level(self):
+        """Test that log.debug output is correctly suppressed when log level is INFO."""
+
+        sink = StringIO()
+        # Add handler with INFO level (same as default)
+        handler_id = log.add(sink, level="INFO", format="{message}")
+
+        try:
+            # Send debug message
+            log.debug("This debug message should not appear")
+
+            # Send info message (should appear)
+            log.info("This info message should appear")
+
+            output = sink.getvalue()
+            # Debug should be suppressed
+            assert "This debug message should not appear" not in output
+            # Info should appear
+            assert "This info message should appear" in output
         finally:
             log.remove(handler_id)
 
