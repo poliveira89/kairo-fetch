@@ -26,7 +26,7 @@ from .services.search_service import SearchService
     help="Enable quiet mode (WARNING level logging).",
 )
 @click.pass_context
-def cli(ctx: click.Context, verbose: bool, quiet: bool) -> None:
+def cli(ctx: click.Context, **_) -> None:
     """Email Fetch - Retrieve emails from Gmail and IMAP providers."""
     ctx.ensure_object(dict)
     ctx.obj["config"] = Config()
