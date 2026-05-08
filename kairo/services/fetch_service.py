@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Tuple
 import click
 
 from ..config import AccountConfig, Config
+from ..logging import log
 from ..retrievers.gmail import GmailRetriever
 from ..storage import StorageManager
 
@@ -224,6 +225,7 @@ class EmailFetchService:
         click.echo(
             f"Fetching emails from {provider} account '{account_name}' folder '{folder}'"
         )
+        log.debug(f"Fetch emails {provider}")
 
         try:
             if provider == "gmail":

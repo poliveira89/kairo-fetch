@@ -31,7 +31,9 @@ def cli(ctx: click.Context, verbose: bool, quiet: bool) -> None:
     ctx.ensure_object(dict)
     ctx.obj["config"] = Config()
 
-    # Determine log level based on flags
+    verbose = ctx.params.get("verbose", False)
+    quiet = ctx.params.get("quiet", False)
+
     if verbose:
         log_level = "DEBUG"
     elif quiet:
