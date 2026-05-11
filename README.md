@@ -5,7 +5,7 @@ A simple CLI tool for fetching emails from Gmail and IMAP providers.
 ## Installation
 
 ### Prerequisites
-- Python 3.8+
+- Python 3.12+
 - Poetry (for dependency management)
 
 ### Setup
@@ -45,6 +45,9 @@ python -m kairo.cli list-accounts
 ### Configuration
 
 The tool uses a configuration file located at `~/.kairo/config.json`. You can also specify a custom config path.
+
+**OAuth Settings** can also be configured via environment variables with the `OAUTH_` prefix:
+- `OAUTH_TOKEN_URL`: Override the default OAuth2 token endpoint (default: `https://oauth2.googleapis.com/token`)
 
 Example config:
 ```json
@@ -114,12 +117,12 @@ poetry run pylint kairo/
 
 ### Implemented
 - [x] Basic CLI structure with Click
-- [x] Configuration management with JSON
+- [x] Configuration management with JSON and environment variables
 - [x] Storage path management
 - [x] Data models with Pydantic
 - [x] Gmail retrieval with OAuth2 authentication
 - [x] Email storage and indexing
-- [x] OAuth2 authentication flow
+- [x] OAuth2 authentication flow with configurable token endpoint
 
 ### Planned
 - [ ] IMAP email retrieval
