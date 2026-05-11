@@ -4,9 +4,15 @@ import json
 from pathlib import Path
 from typing import Dict
 
-from pydantic import BaseModel
+from pydantic import BaseModel, BaseSettings
 
 from .logging import log
+
+
+class OauthSettings(BaseSettings):
+    """OAuth configuration settings."""
+
+    token_url: str = "https://oauth2.googleapis.com/token"
 
 
 class AccountConfig(BaseModel):
