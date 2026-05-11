@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from kairo.config import AccountConfig, Config, OauthSettings
+from kairo.config import AccountConfig, Config, OAuthSettings
 from kairo.retrievers.gmail import GmailRetriever
 from kairo.services.fetch_service import GmailAuthenticator
 
@@ -30,12 +30,12 @@ def account_config():
 
 
 def test_gmail_authenticator_uses_oauth_settings_token_url(mock_config, account_config):
-    """Test that GmailAuthenticator uses token_url from OauthSettings during OAuth exchange."""
+    """Test that GmailAuthenticator uses token_url from OAuthSettings during OAuth exchange."""
 
-    expected_url: str = OauthSettings().token_url
+    expected_url: str = OAuthSettings().token_url
 
     with patch(
-        "kairo.services.fetch_service.OauthSettings",
+        "kairo.services.fetch_service.OAuthSettings",
         return_value=MagicMock(token_url=expected_url),
     ):
         authenticator = GmailAuthenticator(mock_config)
