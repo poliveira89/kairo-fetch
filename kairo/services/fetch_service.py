@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Tuple
 
 import click
 
-from ..config import AccountConfig, Config, OauthSettings
+from ..config import AccountConfig, Config, OAuthSettings
 from ..logging import log
 from ..retrievers.gmail import GmailRetriever
 from ..storage import StorageManager
@@ -146,7 +146,7 @@ class GmailAuthenticator:
 
             click.echo("3. Exchanging code for access token...")
 
-            token_url = OauthSettings().token_url
+            token_url = OAuthSettings().token_url
             token_data = {
                 "code": auth_code,
                 "client_id": client_id,

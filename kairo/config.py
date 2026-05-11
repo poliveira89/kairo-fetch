@@ -9,7 +9,7 @@ from pydantic import BaseModel, BaseSettings
 from .logging import log
 
 
-class OauthSettings(BaseSettings):
+class OAuthSettings(BaseSettings):
     """OAuth configuration settings."""
 
     token_url: str = "https://oauth2.googleapis.com/token"
