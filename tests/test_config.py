@@ -1,6 +1,6 @@
 """Tests for configuration module."""
 
-from kairo.config import Config
+from kairo.config import Config, OauthSettings
 
 
 def test_config_initialization():
@@ -25,6 +25,27 @@ def test_config_repr():
     assert "config_path=" in repr_str
     assert "accounts=" in repr_str
     assert ")" in repr_str
+
+
+# OauthSettings tests
+
+
+def test_oauth_settings_default_token_url():
+    """Test that OauthSettings provides the correct default token_url for Google OAuth."""
+    settings = OauthSettings()
+    assert settings.token_url == "https://oauth2.googleapis.com/token"
+
+
+def test_oauth_settings_env_override(monkeypatch):
+    """Test that OauthSettings correctly overrides token_url via environment variable."""
+    expected_url = OauthSettings().token_url
+    monkeypatch.setenv("OAUTH_TOKEN_URL", expected_url)
+
+    settings = OauthSettings()
+    assert settings.token_url == expected_url
+
+    # Clean up
+    monkeypatch.delenv("OAUTH_TOKEN_URL", raising=False)
 
 
 def test_config_repr_with_accounts():
