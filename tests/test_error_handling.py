@@ -23,12 +23,11 @@ def test_config_file_not_found():
         config_path = Path(temp_dir) / "nonexistent.json"
 
         # Should create default config when file doesn't exist
+        Config.reset()
         config = Config(str(config_path))
         assert config.config_path == str(config_path)
-        assert config.data == {
-            "accounts": {},
-            "storage": {"path": str(Path.home() / ".kairo" / "storage")},
-        }
+        assert config.data.accounts == {}
+        assert config.data.storage.path == str(Path.home() / ".kairo" / "storage")
 
 
 def test_config_file_invalid_json():
@@ -39,12 +38,11 @@ def test_config_file_invalid_json():
 
     try:
         # Should handle invalid JSON gracefully
+        Config.reset()
         config = Config(config_file)
         # Should return default config
-        assert config.data == {
-            "accounts": {},
-            "storage": {"path": str(Path.home() / ".kairo" / "storage")},
-        }
+        assert config.data.accounts == {}
+        assert config.data.storage.path == str(Path.home() / ".kairo" / "storage")
     finally:
         os.unlink(config_file)
 

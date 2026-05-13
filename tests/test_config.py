@@ -1,16 +1,18 @@
 """Tests for configuration module."""
 
-from kairo.config import Config, OAuthSettings
+from kairo.config import Config
 
 
 def test_config_initialization():
     """Test that Config can be initialized."""
+    Config.reset()
     config = Config()
     assert config is not None
 
 
 def test_config_has_expected_attributes():
     """Test that Config has expected attributes."""
+    Config.reset()
     config = Config()
     # Add assertions for expected attributes once they're defined
     # For now, just test that it initializes successfully
@@ -19,6 +21,7 @@ def test_config_has_expected_attributes():
 
 def test_config_repr():
     """Test Config __repr__ method."""
+    Config.reset()
     config = Config()
     repr_str = repr(config)
     assert "Config(" in repr_str
@@ -27,25 +30,68 @@ def test_config_repr():
     assert ")" in repr_str
 
 
-# OAuthSettings tests
+# Config OAuth tests
 
 
-def test_oauth_settings_default_token_url():
-    """Test that OAuthSettings provides the correct default token_url for Google OAuth."""
-    settings = OAuthSettings()
-    assert settings.token_url == "https://oauth2.googleapis.com/token"
+def test_config_oauth_default_token_url():
+    """Test that Config provides the correct default token_url for Google OAuth."""
+    Config.reset()
+    config = Config()
+    assert config.oauth.token_url == "https://oauth2.googleapis.com/token"
 
 
-def test_oauth_settings_env_override(monkeypatch):
-    """Test that OAuthSettings correctly overrides token_url via environment variable."""
+def test_config_oauth_custom_token_url():
+    """Test that Config can use a custom OAuthConfig with custom token_url."""
+    import json
+    import tempfile
+    from pathlib import Path
+
     custom_url = "https://custom.oauth.token.url/token"
-    monkeypatch.setenv("TOKEN_URL", custom_url)
 
-    settings = OAuthSettings()
-    assert settings.token_url == custom_url
+    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
+        config_content = {
+            "accounts": {},
+            "storage": {"path": "/tmp/test_storage"},
+            "oauth": {"token_url": custom_url},
+        }
+        json.dump(config_content, f)
+        config_file = f.name
 
-    # Clean up
-    monkeypatch.delenv("TOKEN_URL", raising=False)
+    try:
+        Config.reset()
+        config = Config(config_file)
+        assert config.oauth.token_url == custom_url
+    finally:
+        Path(config_file).unlink()
+        Config.reset()
+
+
+def test_config_oauth_access():
+    """Test that Config exposes OAuthConfig via oauth attribute."""
+    Config.reset()
+    config = Config()
+    assert hasattr(config, "oauth")
+    assert config.oauth.token_url == "https://oauth2.googleapis.com/token"
+
+
+def test_config_singleton():
+    """Test that Config is a singleton."""
+    Config.reset()
+    config1 = Config()
+    config2 = Config()
+    assert config1 is config2
+    Config.reset()
+
+
+def test_config_reset():
+    """Test that Config.reset() allows creating a new instance."""
+    Config.reset()
+    config1 = Config()
+    Config.reset()
+    config2 = Config()
+    # After reset, config2 should be a new instance
+    assert config1 is not config2
+    Config.reset()
 
 
 def test_config_repr_with_accounts():
@@ -69,6 +115,7 @@ def test_config_repr_with_accounts():
         config_file = f.name
 
     try:
+        Config.reset()
         config = Config(config_file)
         repr_str = repr(config)
         assert "Config(" in repr_str
@@ -77,3 +124,4 @@ def test_config_repr_with_accounts():
         assert ")" in repr_str
     finally:
         Path(config_file).unlink()
+        Config.reset()
