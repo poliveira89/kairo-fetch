@@ -28,10 +28,3 @@ class EmailMetadata(BaseModel):
     attachments: list[str] = []
     has_attachments: bool = False
     processed: bool = False
-
-
-class StorageConfig(BaseModel):
-    """Storage configuration."""
-
-    path: str
-    structure: str = "flat"  # 'flat' or 'hierarchical'

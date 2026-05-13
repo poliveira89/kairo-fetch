@@ -2,14 +2,14 @@
 
 import json
 from pathlib import Path
-from typing import Dict
+from typing import ClassVar, Dict, Optional
 
-from pydantic import BaseModel, BaseSettings
+from pydantic import BaseModel
 
 from .logging import log
 
 
-class OAuthSettings(BaseSettings):
+class OAuthConfig(BaseModel):
     """OAuth configuration settings."""
 
     token_url: str = "https://oauth2.googleapis.com/token"
@@ -40,14 +40,45 @@ class ConfigData(BaseModel):
 
     accounts: Dict[str, AccountConfig]
     storage: StorageConfig
+    oauth: OAuthConfig = OAuthConfig()
 
 
 class Config:
-    """Configuration manager for email-fetch tool."""
+    """Configuration manager for email-fetch tool - singleton pattern."""
 
-    def __init__(self, config_path: str | None = None):
+    _instance: ClassVar[Optional["Config"]] = None
+
+    def __new__(cls, config_path: str | None = None):
+        """Ensure singleton pattern by returning existing instance."""
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
+            cls._instance._config_path_arg = None
+
+        # If a different config_path is provided, reinitialize
+        if config_path != cls._instance._config_path_arg:
+            cls._instance._config_path_arg = config_path
+            cls._instance._initialized = False
+
+        if not cls._instance._initialized:
+            cls._instance._init(config_path)
+        return cls._instance
+
+    def _init(self, config_path: str | None = None):
+        """Initialize the config instance."""
         self.config_path: str = config_path or str(self._get_default_config_path())
         self.data: ConfigData = self._load_config()
+        self.oauth: OAuthConfig = self.data.oauth
+        self._initialized = True
+        self._config_path_arg = config_path
+
+    @classmethod
+    def reset(cls) -> None:
+        """Reset singleton instance (useful for testing)."""
+        if cls._instance is not None:
+            cls._instance._initialized = False
+            cls._instance._config_path_arg = None
+        cls._instance = None
 
     def _get_default_config_path(self) -> Path:
         """Get default configuration file path."""
@@ -56,7 +87,7 @@ class Config:
         return config_dir / "config.json"
 
     def _load_config(self) -> ConfigData:
-        """Load configuration from file."""
+        """Load configuration from file with backward compatibility."""
         try:
             with open(self.config_path, "r") as f:
                 data = json.load(f)
@@ -65,6 +96,8 @@ class Config:
                     data["accounts"] = {}
                 if "storage" not in data:
                     data["storage"] = {"path": str(Path.home() / ".kairo" / "storage")}
+                if "oauth" not in data:
+                    data["oauth"] = {}
 
                 # Validate and convert accounts to proper format
                 validated_accounts = {}
@@ -80,7 +113,9 @@ class Config:
         except (FileNotFoundError, json.JSONDecodeError):
             default_storage_path = str(Path.home() / ".kairo" / "storage")
             return ConfigData(
-                accounts={}, storage=StorageConfig(path=default_storage_path)
+                accounts={},
+                storage=StorageConfig(path=default_storage_path),
+                oauth=OAuthConfig(),
             )
 
     def save(self) -> None:
