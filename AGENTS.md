@@ -10,14 +10,14 @@ This document provides AI coding agents with the specific conventions, rules, an
 
 ```
 kairo/
-├── cli.py               # Main CLI interface
+├── cli.py              # Main CLI interface
 ├── config.py           # Configuration management
 ├── models.py           # Data models (Pydantic)
 ├── storage.py          # Storage operations
 └── retrievers/         # Provider-specific implementations
     └── gmail.py        # Gmail retrieval
 
-tests/                 # Test suite
+tests/                  # Test suite
 ```
 
 ### Naming Conventions
@@ -221,7 +221,7 @@ def test_config_loading():
 
 **Code should be self-documenting first, comments should explain the "why" not the "what"**
 
-- Don't write one-liner comments inside methods or classes
+- *MANDATORY:* Don't write one-liner comments inside methods or classes
 - Document macro actions and architectural decisions
 - Explain why something was implemented a certain way
 - Help future developers understand the reasoning behind choices

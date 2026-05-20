@@ -104,6 +104,17 @@ class GmailAuthenticator:
     def __init__(self, config: Config):
         self.config = config
 
+    def _can_use_playwright(self) -> bool:
+        """Check if Playwright is available for automation."""
+        # @TODO refactor this - previous implementation was horrendous
+        return True
+
+    def _manual_oauth_flow(self, auth_url: str) -> str:
+        """Manual OAuth flow - prompt user for auth code."""
+        click.echo("1. Visit this URL to authorize:")
+        click.echo(f"   {auth_url}")
+        return click.prompt("2. Paste the authorization code")
+
     def authenticate(
         self, account: str, account_config: AccountConfig
     ) -> GmailRetriever | None:
@@ -130,21 +141,27 @@ class GmailAuthenticator:
             from urllib.parse import urlencode
             from urllib.request import Request, urlopen
 
-            auth_url = "https://accounts.google.com/o/oauth2/auth?" + urlencode(
-                {
-                    "client_id": client_id,
-                    "redirect_uri": "urn:ietf:wg:oauth:2.0:oob",
-                    "scope": "https://mail.google.com/",
-                    "response_type": "code",
-                }
-            )
+            auth_code: str | None = None
+            if self._can_use_playwright() and password:
+                try:
+                    from .oauth_automation import OAuthAutomator
 
-            click.echo("1. Visit this URL to authorize:")
-            click.echo(f"   {auth_url}")
+                    automator = OAuthAutomator(
+                        client_id=client_id,
+                        client_secret=client_secret,
+                        username=username,
+                        password=password,
+                    )
+                    auth_code = automator.get_authorization_code()
+                except Exception as e:
+                    log.warning(f"OAuth automation failed: {e}")
+                    auth_code = None
 
-            auth_code = click.prompt("2. Paste the authorization code")
+            click.echo("Exchanging code for access token...")
 
-            click.echo("3. Exchanging code for access token...")
+            if not auth_code:
+                click.echo("❌ No authorization code received", err=True)
+                return None
 
             token_url = self.config.oauth.token_url
             token_data = {
@@ -164,7 +181,6 @@ class GmailAuthenticator:
 
                 click.echo("✅ OAuth2 authentication successful!")
 
-                # Create a new account config with updated tokens
                 updated_account_config = AccountConfig(
                     provider=account_config.provider,
                     username=account_config.username,

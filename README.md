@@ -14,6 +14,12 @@ A simple CLI tool for fetching emails from Gmail and IMAP providers.
 # Install dependencies
 poetry install
 
+# Install Playwright browsers (required for OAuth2 automation)
+# Chrome is required for Google OAuth automation (better compatibility):
+poetry run playwright install chrome
+# Optionally install Chromium for other purposes:
+poetry run playwright install chromium
+
 # Install the package in development mode
 poetry install --dev
 ```
@@ -123,6 +129,7 @@ poetry run pylint kairo/
 - [x] Gmail retrieval with OAuth2 authentication
 - [x] Email storage and indexing
 - [x] OAuth2 authentication flow with configurable token endpoint
+- [x] **Automated OAuth2 browser flow with Playwright** - Automatically handles Google login and consent when credentials are provided in config
 
 ### Planned
 - [ ] IMAP email retrieval
@@ -141,7 +148,26 @@ poetry run pylint kairo/
 4. Add the following scopes:
    - `https://www.googleapis.com/auth/gmail.readonly` (read-only)
 
+> **Note on OAuth2 Automation**: If you provide both `username` and `password` in your account configuration along with `client_id` and `client_secret`, kairo-fetch will automatically attempt to retrieve the authorization code using Playwright. This requires Playwright browsers to be installed (`poetry run playwright install chromium` and `poetry run playwright install chrome`). For best results with Google OAuth, install Chrome and use it as the browser channel. If automation fails (e.g., due to CAPTCHA or 2FA), it will fall back to manual entry.
+
 5. Configure your account in `~/.kairo/config.json`:
+
+**For OAuth2 automation** (requires password for Google login):
+```json
+{
+  "accounts": {
+    "gmail": {
+      "provider": "gmail",
+      "username": "your.email@gmail.com",
+      "password": "your-app-password",
+      "client_id": "your-client-id",
+      "client_secret": "your-client-secret"
+    }
+  }
+}
+```
+
+**For manual OAuth2 flow** (no password needed, you'll be prompted):
 ```json
 {
   "accounts": {
