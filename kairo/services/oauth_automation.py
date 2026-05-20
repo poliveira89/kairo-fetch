@@ -5,6 +5,7 @@ import re
 from typing import Optional
 from urllib.parse import urlencode
 
+import click
 from playwright.async_api import Browser, Page, Playwright, async_playwright
 
 from ..logging import log
@@ -116,7 +117,29 @@ class OAuthAutomator:
 
             await page.wait_for_load_state("networkidle", timeout=self.ACTION_TIMEOUT)
 
-            return await self._handle_login(page)
+            login_result = await self._handle_login(page)
+            if login_result is False:
+                return None
+            if isinstance(login_result, str):
+                return login_result
+
+            if not await self._handle_consent(page):
+                return None
+
+            current_url = page.url
+            log.debug(f"Current URL after auth flow: {current_url}")
+
+            auth_code = self._extract_auth_code(current_url)
+
+            if not auth_code:
+                auth_code = await self._extract_auth_code_from_page(page)
+
+            if auth_code:
+                click.echo("✅ Successfully retrieved authorization code via automation")
+                return auth_code
+            else:
+                log.warning(f"Could not extract auth code from URL: {current_url}")
+                return None
         except Exception as e:
             log.warning(f"Error during OAuth automation: {e}")
             return None

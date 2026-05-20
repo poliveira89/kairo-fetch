@@ -1,6 +1,9 @@
 """Fetch service for email retrieval operations."""
 
+import json
 from typing import Any, Dict, List, Tuple
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 import click
 
@@ -8,6 +11,7 @@ from ..config import AccountConfig, Config
 from ..logging import log
 from ..retrievers.gmail import GmailRetriever
 from ..storage import StorageManager
+from .oauth_automation import OAuthAutomator
 
 
 class EmailProcessor:
@@ -74,8 +78,6 @@ class AccountFinder:
             matching_accounts: List[Tuple[str, AccountConfig]] = []
 
             for name, acc in accounts.items():
-                # Match if provider field matches, or if account name matches provider
-                # If no provider field is set, use account name as provider
                 effective_provider = acc.provider if acc.provider else name
 
                 if effective_provider == provider or name == provider:
@@ -109,12 +111,6 @@ class GmailAuthenticator:
         # @TODO refactor this - previous implementation was horrendous
         return True
 
-    def _manual_oauth_flow(self, auth_url: str) -> str:
-        """Manual OAuth flow - prompt user for auth code."""
-        click.echo("1. Visit this URL to authorize:")
-        click.echo(f"   {auth_url}")
-        return click.prompt("2. Paste the authorization code")
-
     def authenticate(
         self, account: str, account_config: AccountConfig
     ) -> GmailRetriever | None:
@@ -137,15 +133,9 @@ class GmailAuthenticator:
         elif client_id and client_secret and not access_token:
             click.echo("Performing OAuth2 authentication flow...")
 
-            import json
-            from urllib.parse import urlencode
-            from urllib.request import Request, urlopen
-
             auth_code: str | None = None
             if self._can_use_playwright() and password:
                 try:
-                    from .oauth_automation import OAuthAutomator
-
                     automator = OAuthAutomator(
                         client_id=client_id,
                         client_secret=client_secret,
