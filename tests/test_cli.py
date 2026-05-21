@@ -1,113 +1,115 @@
 """Tests for the CLI interface."""
 
+from unittest.mock import patch
+
+import pytest
 from click.testing import CliRunner
 
-from kairo import cli as cli_parent
 from kairo.cli import cli
+from kairo.config import Config
 
 
-def test_cli_help():
+@pytest.fixture
+def runner(tmp_path):
+    """Provide a CliRunner instance with isolated filesystem and temp home for CLI tests."""
+    Config.reset()
+
+    with CliRunner().isolated_filesystem(temp_dir=str(tmp_path)):
+        with patch("kairo.config.Path.home", return_value=tmp_path):
+            yield CliRunner()
+
+
+def test_cli_help(runner: CliRunner) -> None:
     """Test that CLI help works."""
-    runner = CliRunner()
     result = runner.invoke(cli, ["--help"])
     assert result.exit_code == 0
-    assert "Email Fetch" in result.output
-    assert "fetch" in result.output
-    assert "search" in result.output
-    assert "list-accounts" in result.output
+    assert all(
+        x in result.output
+        for x in ["Usage:", "Email Fetch", "fetch", "search", "list-accounts"]
+    )
 
 
-def test_fetch_command_help():
+def test_fetch_command_help(runner: CliRunner) -> None:
     """Test fetch command help."""
-    runner = CliRunner()
     result = runner.invoke(cli, ["fetch", "--help"])
     assert result.exit_code == 0
-    assert "Fetch emails" in result.output
-    assert "--provider" in result.output
-    assert "--account" in result.output
+    assert all(x in result.output for x in ["Fetch emails", "--provider", "--account"])
 
 
-def test_search_command_help():
+def test_search_command_help(runner: CliRunner) -> None:
     """Test search command help."""
-    runner = CliRunner()
     result = runner.invoke(cli, ["search", "--help"])
     assert result.exit_code == 0
-    assert "Search emails" in result.output
-    assert "--account" in result.output
-    assert "--query" in result.output
+    assert all(x in result.output for x in ["Search emails", "--account", "--query"])
 
 
-def test_list_accounts_command_help():
+def test_list_accounts_command_help(runner: CliRunner) -> None:
     """Test list-accounts command help."""
-    runner = CliRunner()
     result = runner.invoke(cli, ["list-accounts", "--help"])
     assert result.exit_code == 0
     assert "List configured accounts" in result.output
 
 
-def test_fetch_command_requires_provider():
+def test_fetch_command_requires_provider(runner: CliRunner) -> None:
     """Test that fetch command requires provider."""
-    runner = CliRunner()
     result = runner.invoke(cli, ["fetch", "--account", "test"])
     assert result.exit_code != 0
-    assert "required" in result.output.lower() or "provider" in result.output.lower()
+    assert any(x in result.output.lower() for x in ["required", "provider"])
 
 
-def test_fetch_command_imap_requires_server():
+def test_fetch_command_imap_requires_server(runner: CliRunner) -> None:
     """Test that IMAP provider requires server."""
-    runner = CliRunner()
     result = runner.invoke(cli, ["fetch", "--provider", "imap", "--account", "test"])
-    assert result.exit_code == 0  # Should show error message but exit 0
+    assert result.exit_code == 0
     assert "server is required" in result.output.lower()
 
 
-def test_search_command_execution():
+def test_search_command_execution(runner: CliRunner) -> None:
     """Test search command execution."""
-    runner = CliRunner()
     result = runner.invoke(
         cli, ["search", "--account", "test_account", "--query", "from:john"]
     )
     assert result.exit_code == 0
-    assert "Searching account 'test_account' for query: from:john" in result.output
-    assert "Feature not yet implemented" in result.output
+    assert all(
+        x in result.output
+        for x in [
+            "Searching account 'test_account' for query: from:john",
+            "Feature not yet implemented",
+        ]
+    )
 
 
-def test_list_accounts_command_execution():
+def test_list_accounts_command_execution(runner: CliRunner) -> None:
     """Test list-accounts command execution."""
-    runner = CliRunner()
     result = runner.invoke(cli, ["list-accounts"])
     assert result.exit_code == 0
-    assert "List of configured accounts:" in result.output
-    assert "Feature not yet implemented" in result.output
+    assert all(
+        x in result.output
+        for x in ["List of configured accounts:", "Feature not yet implemented"]
+    )
 
 
-def test_init_command_execution():
+def test_init_command_execution(runner: CliRunner) -> None:
     """Test init command execution."""
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        result = runner.invoke(cli, ["init"])
-        assert result.exit_code == 0
-        assert (
-            "Initialized kairo configuration and storage directories" in result.output
-        )
-
-
-def test_cli_main_block():
-    """Test CLI main block."""
-
-    assert hasattr(cli_parent, "cli")
-    assert hasattr(cli_parent, "fetch")
-    assert hasattr(cli_parent, "search")
-    assert hasattr(cli_parent, "list_accounts")
-    assert hasattr(cli_parent, "init")
-
-
-def test_cli_direct_execution():
-    """Test CLI direct execution simulation."""
-
-    runner = CliRunner()
-
-    result = runner.invoke(cli, ["--help"])
+    result = runner.invoke(cli, ["init"])
     assert result.exit_code == 0
-    assert "Usage:" in result.output
-    assert "Email Fetch" in result.output
+    assert "Initialized kairo configuration and storage directories" in result.output
+
+
+def test_fetch_command_missing_required_args(runner: CliRunner) -> None:
+    """Test fetch command fails without required arguments."""
+    result = runner.invoke(cli, ["fetch"])
+    assert result.exit_code != 0
+    assert any(
+        x in result.output.lower()
+        for x in ["required", "missing", "provider", "account"]
+    )
+
+
+def test_search_command_missing_required_args(runner: CliRunner) -> None:
+    """Test search command fails without required arguments."""
+    result = runner.invoke(cli, ["search"])
+    assert result.exit_code != 0
+    assert any(
+        x in result.output.lower() for x in ["required", "missing", "account", "query"]
+    )
