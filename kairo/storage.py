@@ -52,7 +52,6 @@ class IndexManager:
         if "folders" not in index_dict:
             index_dict["folders"] = {}
 
-        # Convert old format to new format for backward compatibility
         validated_folders = {}
         for folder_name, emails in index_dict["folders"].items():
             validated_emails = []

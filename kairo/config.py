@@ -55,7 +55,6 @@ class Config:
             cls._instance._initialized = False
             cls._instance._config_path_arg = None
 
-        # If a different config_path is provided, reinitialize
         if config_path != cls._instance._config_path_arg:
             cls._instance._config_path_arg = config_path
             cls._instance._initialized = False
@@ -91,7 +90,6 @@ class Config:
         try:
             with open(self.config_path, "r") as f:
                 data = json.load(f)
-                # Handle backward compatibility with old config format
                 if "accounts" not in data:
                     data["accounts"] = {}
                 if "storage" not in data:
@@ -99,7 +97,6 @@ class Config:
                 if "oauth" not in data:
                     data["oauth"] = {}
 
-                # Validate and convert accounts to proper format
                 validated_accounts = {}
                 for account_name, account_data in data["accounts"].items():
                     try:
@@ -121,7 +118,6 @@ class Config:
     def save(self) -> None:
         """Save configuration to file."""
         with open(self.config_path, "w") as f:
-            # Convert Pydantic model to dict for JSON serialization
             data_dict = self.data.dict()
             json.dump(data_dict, f, indent=2)
 

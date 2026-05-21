@@ -1,6 +1,8 @@
 """Tests for the CLI interface."""
+
 from click.testing import CliRunner
 
+from kairo import cli as cli_parent
 from kairo.cli import cli
 
 
@@ -92,28 +94,19 @@ def test_init_command_execution():
 
 def test_cli_main_block():
     """Test CLI main block."""
-    # This test covers the if __name__ == "__main__": block
-    # by importing the module and checking that it doesn't execute main
-    from kairo import cli
 
-    assert hasattr(cli, "cli")
-    assert hasattr(cli, "fetch")
-    assert hasattr(cli, "search")
-    assert hasattr(cli, "list_accounts")
-    assert hasattr(cli, "init")
+    assert hasattr(cli_parent, "cli")
+    assert hasattr(cli_parent, "fetch")
+    assert hasattr(cli_parent, "search")
+    assert hasattr(cli_parent, "list_accounts")
+    assert hasattr(cli_parent, "init")
 
 
 def test_cli_direct_execution():
     """Test CLI direct execution simulation."""
-    # This test simulates what happens when the module is executed directly
-    # by calling cli() directly
-    from click.testing import CliRunner
-
-    from kairo.cli import cli
 
     runner = CliRunner()
 
-    # Test that calling cli() without arguments shows help
     result = runner.invoke(cli, ["--help"])
     assert result.exit_code == 0
     assert "Usage:" in result.output

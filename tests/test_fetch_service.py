@@ -32,12 +32,11 @@ def account_config():
 
 def test_gmail_authenticator_uses_oauth_config_token_url(mock_config):
     """Test that GmailAuthenticator uses token_url from config.oauth during OAuth exchange."""
-    from kairo.config import AccountConfig as AC
 
     expected_url: str = mock_config.oauth.token_url
     authenticator = GmailAuthenticator(mock_config)
 
-    account_config = AC(
+    account_config = AccountConfig(
         provider="gmail",
         username="test@example.com",
         client_id="test_client_id",
@@ -46,7 +45,6 @@ def test_gmail_authenticator_uses_oauth_config_token_url(mock_config):
         access_token=None,
     )
 
-    # Create mock for OAuthAutomator
     mock_automator_instance = MagicMock()
     mock_automator_instance.get_authorization_code.return_value = "test_auth_code"
 
@@ -56,7 +54,6 @@ def test_gmail_authenticator_uses_oauth_config_token_url(mock_config):
         patch("kairo.services.fetch_service.Request") as mock_request,
         patch("kairo.services.fetch_service.urlopen") as mock_urlopen,
     ):
-        # Configure the class mock to return our instance when called
         mock_automator_class.return_value = mock_automator_instance
 
         mock_response = MagicMock()

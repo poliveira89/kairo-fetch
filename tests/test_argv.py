@@ -1,5 +1,6 @@
 """Test CLI argument propagation when executed as a script."""
 
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -14,7 +15,6 @@ def get_temp_kairo_dir():
     storage_dir = kairo_dir / "storage"
     storage_dir.mkdir(exist_ok=True)
 
-    # Create a minimal config file
     config_file = kairo_dir / "config.json"
     config_file.write_text(
         '{"accounts": {}, "storage": {"path": "' + str(storage_dir) + '"}}'
@@ -27,7 +27,6 @@ def test_cli_entry_point_propagates_arguments():
     """Test that CLI entry point propagates system arguments correctly."""
     temp_dir = get_temp_kairo_dir()
 
-    # Test execution as a module with -m flag
     result = subprocess.run(
         [sys.executable, "-m", "kairo.cli", "--help"],
         capture_output=True,
@@ -35,9 +34,6 @@ def test_cli_entry_point_propagates_arguments():
         cwd=Path(__file__).parent.parent,
         env={"HOME": str(temp_dir), "PYTHONPATH": str(Path(__file__).parent.parent)},
     )
-
-    # Cleanup
-    import shutil
 
     shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -65,9 +61,6 @@ def test_cli_fetch_command_help():
         env={"HOME": str(temp_dir), "PYTHONPATH": str(Path(__file__).parent.parent)},
     )
 
-    # Cleanup
-    import shutil
-
     shutil.rmtree(temp_dir, ignore_errors=True)
 
     assert result.returncode == 0, f"fetch --help failed with: {result.stderr}"
@@ -90,9 +83,6 @@ def test_cli_search_command_help():
         cwd=Path(__file__).parent.parent,
         env={"HOME": str(temp_dir), "PYTHONPATH": str(Path(__file__).parent.parent)},
     )
-
-    # Cleanup
-    import shutil
 
     shutil.rmtree(temp_dir, ignore_errors=True)
 
