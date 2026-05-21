@@ -22,7 +22,6 @@ class OAuthAutomator:
     """
 
     AUTH_URL_BASE = "https://accounts.google.com/o/oauth2/auth"
-    TOKEN_URL = "https://oauth2.googleapis.com/token"
 
     NAVIGATION_TIMEOUT = 30000  # 30 seconds
     ACTION_TIMEOUT = 10000  # 10 seconds
@@ -94,7 +93,7 @@ class OAuthAutomator:
             self._playwright = playwright
 
             browser = await playwright.chromium.launch(
-                headless=False,
+                headless=True,
                 timeout=self.NAVIGATION_TIMEOUT,
                 channel="chrome",
                 args=[

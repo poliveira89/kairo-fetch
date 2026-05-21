@@ -14,7 +14,7 @@ def oauth_automator():
         client_id="test_client_id",
         client_secret="test_client_secret",
         username="test@example.com",
-        password="test_password",
+        password="abc_123",
     )
 
 
@@ -26,7 +26,7 @@ class TestOAuthAutomatorInit:
         assert oauth_automator.client_id == "test_client_id"
         assert oauth_automator.client_secret == "test_client_secret"
         assert oauth_automator.username == "test@example.com"
-        assert oauth_automator.password == "test_password"
+        assert oauth_automator.password == "abc_123"
 
     def test_init_with_custom_scope(self):
         """Test initialization with custom scope."""
@@ -34,7 +34,7 @@ class TestOAuthAutomatorInit:
             client_id="test_client_id",
             client_secret="test_client_secret",
             username="test@example.com",
-            password="test_password",
+            password="abc_123",
             scope="https://www.googleapis.com/auth/drive",
         )
         assert automator.scope == "https://www.googleapis.com/auth/drive"
