@@ -270,6 +270,24 @@ def runner():
     return CliRunner()
 
 
+@pytest.fixture
+def config_path(tmp_path):
+    config = {
+        "accounts": {
+            "test_account": {
+                "provider": "gmail",
+                "username": "test@example.com",
+                "password": "test_password",
+            }
+        },
+        "storage": {"path": str(tmp_path / "storage")},
+    }
+    config_path = tmp_path / "config.json"
+    with open(config_path, "w") as f:
+        json.dump(config, f)
+    return config_path
+
+
 def assert_contains_in_order(output: str, *strings: str) -> None:
     """Assert that all strings appear in output in the specified order."""
     indices = []
@@ -296,21 +314,9 @@ def assert_matches_regex(output: str, pattern: str) -> None:
 class TestFetchCommandBasic:
     """Tests for basic fetch command functionality."""
 
-    def test_fetch_with_password_auth(self, runner, tmp_path, mock_config_path):
+    def test_fetch_with_password_auth(self, runner, config_path, mock_config_path):
         """Test fetch command with password authentication."""
-        config = {
-            "accounts": {
-                "test_account": {
-                    "provider": "gmail",
-                    "username": "test@example.com",
-                    "password": "test_password",
-                }
-            },
-            "storage": {"path": str(tmp_path / "storage")},
-        }
-        config_path = tmp_path / "config.json"
-        with open(config_path, "w") as f:
-            json.dump(config, f)
+
         mock_config_path.return_value = config_path
 
         result = runner.invoke(
@@ -739,21 +745,9 @@ class TestFetchCommandErrors:
         assert result.exit_code == 0
         assert "server is required for IMAP provider" in result.output
 
-    def test_network_error_handling(self, runner, tmp_path, mock_config_path):
+    def test_network_error_handling(self, runner, config_path, mock_config_path):
         """Test fetch command with network failure."""
-        config = {
-            "accounts": {
-                "test_account": {
-                    "provider": "gmail",
-                    "username": "test@example.com",
-                    "password": "test_password",
-                }
-            },
-            "storage": {"path": str(tmp_path / "storage")},
-        }
-        config_path = tmp_path / "config.json"
-        with open(config_path, "w") as f:
-            json.dump(config, f)
+
         mock_config_path.return_value = config_path
 
         with patch("kairo.services.fetch_service.GmailRetriever") as mock_retriever:
@@ -775,21 +769,9 @@ class TestFetchCommandErrors:
             assert result.exit_code == 0
             assert "Error" in result.output or "Network failed" in result.output
 
-    def test_invalid_folder(self, runner, tmp_path, mock_config_path):
+    def test_invalid_folder(self, runner, config_path, mock_config_path):
         """Test fetch command with invalid folder."""
-        config = {
-            "accounts": {
-                "test_account": {
-                    "provider": "gmail",
-                    "username": "test@example.com",
-                    "password": "test_password",
-                }
-            },
-            "storage": {"path": str(tmp_path / "storage")},
-        }
-        config_path = tmp_path / "config.json"
-        with open(config_path, "w") as f:
-            json.dump(config, f)
+
         mock_config_path.return_value = config_path
 
         with patch("kairo.services.fetch_service.GmailRetriever") as mock_retriever:
@@ -897,21 +879,8 @@ class TestAccountFinder:
 
         assert finder.validate_imap_requirements("gmail", None) is True
 
-    def test_find_account_config(self, tmp_path):
+    def test_find_account_config(self, config_path):
         """Test finding account configuration."""
-        config = {
-            "accounts": {
-                "test_account": {
-                    "provider": "gmail",
-                    "username": "test@example.com",
-                    "password": "test_password",
-                }
-            },
-            "storage": {"path": str(tmp_path / "storage")},
-        }
-        config_path = tmp_path / "config.json"
-        with open(config_path, "w") as f:
-            json.dump(config, f)
 
         config_obj = Config(str(config_path))
         finder = AccountFinder(config_obj)
@@ -937,21 +906,8 @@ class TestAccountFinder:
 class TestGmailAuthenticator:
     """Tests for GmailAuthenticator service."""
 
-    def test_authenticate_with_password(self, tmp_path):
+    def test_authenticate_with_password(self, config_path):
         """Test authentication with password."""
-        config = {
-            "accounts": {
-                "test_account": {
-                    "provider": "gmail",
-                    "username": "test@example.com",
-                    "password": "test_password",
-                }
-            },
-            "storage": {"path": str(tmp_path / "storage")},
-        }
-        config_path = tmp_path / "config.json"
-        with open(config_path, "w") as f:
-            json.dump(config, f)
 
         config_obj = Config(str(config_path))
         authenticator = GmailAuthenticator(config_obj)
@@ -969,21 +925,10 @@ class TestGmailAuthenticator:
 class TestEmailFetchService:
     """Tests for EmailFetchService."""
 
-    def test_process_emails_with_fake_data(self, tmp_path, fake_emails_data):
+    def test_process_emails_with_fake_data(
+        self, tmp_path, config_path, fake_emails_data
+    ):
         """Test processing multiple emails with fake data."""
-        config = {
-            "accounts": {
-                "test_account": {
-                    "provider": "gmail",
-                    "username": "test@example.com",
-                    "password": "test_password",
-                }
-            },
-            "storage": {"path": str(tmp_path / "storage")},
-        }
-        config_path = tmp_path / "config.json"
-        with open(config_path, "w") as f:
-            json.dump(config, f)
 
         config_obj = Config(str(config_path))
         fetch_service = EmailFetchService(config_obj)
@@ -1029,21 +974,8 @@ class TestEmailFetchService:
                             fake_emails_data
                         )
 
-    def test_empty_emails(self, tmp_path):
+    def test_empty_emails(self, config_path):
         """Test processing with no emails."""
-        config = {
-            "accounts": {
-                "test_account": {
-                    "provider": "gmail",
-                    "username": "test@example.com",
-                    "password": "test_password",
-                }
-            },
-            "storage": {"path": str(tmp_path / "storage")},
-        }
-        config_path = tmp_path / "config.json"
-        with open(config_path, "w") as f:
-            json.dump(config, f)
 
         config_obj = Config(str(config_path))
         fetch_service = EmailFetchService(config_obj)
@@ -1072,21 +1004,8 @@ class TestEmailFetchService:
                 assert len(mock_retriever.fetch_emails_calls) == 1
                 assert mock_retriever.fetch_emails_calls[0]["folder"] == "INBOX"
 
-    def test_processed_emails_skipped(self, tmp_path, fake_emails_data):
+    def test_processed_emails_skipped(self, config_path, fake_emails_data):
         """Test that already processed emails are skipped."""
-        config = {
-            "accounts": {
-                "test_account": {
-                    "provider": "gmail",
-                    "username": "test@example.com",
-                    "password": "test_password",
-                }
-            },
-            "storage": {"path": str(tmp_path / "storage")},
-        }
-        config_path = tmp_path / "config.json"
-        with open(config_path, "w") as f:
-            json.dump(config, f)
 
         config_obj = Config(str(config_path))
         fetch_service = EmailFetchService(config_obj)
@@ -1123,21 +1042,8 @@ class TestEmailFetchService:
                     mock_storage.load_index.assert_not_called()
                     mock_storage.save_index.assert_not_called()
 
-    def test_limit_reached(self, tmp_path):
+    def test_limit_reached(self, config_path):
         """Test that processing stops when limit is reached."""
-        config = {
-            "accounts": {
-                "test_account": {
-                    "provider": "gmail",
-                    "username": "test@example.com",
-                    "password": "test_password",
-                }
-            },
-            "storage": {"path": str(tmp_path / "storage")},
-        }
-        config_path = tmp_path / "config.json"
-        with open(config_path, "w") as f:
-            json.dump(config, f)
 
         config_obj = Config(str(config_path))
         fetch_service = EmailFetchService(config_obj)
