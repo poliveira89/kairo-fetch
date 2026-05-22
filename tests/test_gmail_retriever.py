@@ -1,393 +1,307 @@
 """Tests for Gmail retriever functionality."""
 
-from email.message import Message
-from email.mime.application import MIMEApplication
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from unittest.mock import patch
 
-from pytest import fixture, raises
+import pytest
 
 from kairo.models import EmailMetadata
 from kairo.retrievers.gmail import GmailRetriever
-from tests.conftest import assert_raises_on_connect
+from tests.conftest import (
+    FakeEmailGenerator,
+    assert_raises_on_connect,
+    setup_mock_imap_for_fetch,
+)
 
 
-@fixture
-def email_example():
-    return {
-        "email_id": "1",
-        "from_address": "test@example.com",
-        "to_addresses": ["recipient@example.com"],
-        "subject": "Test Subject",
-        "date": "Mon, 1 Jan 2024 12:00:00 +0000",
-        "folder": "INBOX",
-        "attachments": [],
-        "has_attachments": False,
-        "raw": "test email content",
-    }
+class TestGmailRetrieverAuthentication:
+    """Tests for GmailRetriever authentication initialization and connection."""
 
+    def test_basic_auth_initialization(self) -> None:
+        """Test GmailRetriever initialization with username and password."""
+        retriever = GmailRetriever(username="test@example.com", password="password123")
+        assert retriever.username == "test@example.com"
+        assert retriever.password == "password123"
+        assert retriever.access_token is None
 
-def test_gmail_retriever_basic_auth():
-    """Test GmailRetriever initialization with username and password."""
-    retriever = GmailRetriever(username="test@example.com", password="password123")
-    assert retriever.username == "test@example.com"
-    assert retriever.password == "password123"
-    assert retriever.access_token is None
+    def test_oauth2_initialization(self) -> None:
+        """Test GmailRetriever initialization with username and access token."""
+        retriever = GmailRetriever(username="test@example.com", access_token="token123")
+        assert retriever.username == "test@example.com"
+        assert retriever.access_token == "token123"
+        assert retriever.password is None
 
+    def test_missing_credentials_initialization(self) -> None:
+        """Test GmailRetriever with missing credentials."""
+        retriever = GmailRetriever(username="test@example.com")
+        assert retriever.username == "test@example.com"
+        assert retriever.password is None
+        assert retriever.access_token is None
 
-def test_gmail_retriever_oauth2():
-    """Test GmailRetriever initialization with username and access token."""
-    retriever_oauth = GmailRetriever(
-        username="test@example.com", access_token="token123"
-    )
-    assert retriever_oauth.username == "test@example.com"
-    assert retriever_oauth.access_token == "token123"
-    assert retriever_oauth.password is None
+        with pytest.raises(ValueError):
+            retriever.connect()
 
+    def test_empty_username_raises_error(self) -> None:
+        """Test empty username raises ValueError on connect."""
+        assert_raises_on_connect(GmailRetriever, username="")
 
-def test_gmail_retriever_missing_credentials():
-    """Test GmailRetriever with missing credentials."""
-    retriever = GmailRetriever(username="test@example.com")
-    assert retriever.username == "test@example.com"
-    assert retriever.password is None
-    assert retriever.access_token is None
+    def test_long_username_stored_correctly(self) -> None:
+        """Test long username is stored correctly."""
+        long_username = "a" * 300 + "@example.com"
+        retriever = GmailRetriever(username=long_username, password="password")
+        assert retriever.username == long_username
 
-    with raises(ValueError):
+    @patch("imaplib.IMAP4_SSL")
+    def test_connect_password_auth(self, mock_imap) -> None:
+        """Test Gmail connection with password authentication."""
+        retriever = GmailRetriever(username="test@example.com", password="password123")
         retriever.connect()
 
+        mock_imap.assert_called_once_with("imap.gmail.com", 993)
+        mock_imap.return_value.login.assert_called_once_with(
+            "test@example.com", "password123"
+        )
 
-@patch("imaplib.IMAP4_SSL")
-def test_gmail_connect_password(mock_imap):
-    """Test Gmail connection with password authentication."""
-    mock_imap_instance = mock_imap.return_value
-
-    retriever = GmailRetriever(username="test@example.com", password="password123")
-    retriever.connect()
-
-    mock_imap.assert_called_once_with("imap.gmail.com", 993)
-    mock_imap_instance.login.assert_called_once_with("test@example.com", "password123")
-
-
-@patch("imaplib.IMAP4_SSL")
-def test_gmail_connect_oauth2(mock_imap):
-    """Test Gmail connection with OAuth2 authentication."""
-    mock_imap_instance = mock_imap.return_value
-
-    retriever = GmailRetriever(username="test@example.com", access_token="token123")
-    retriever.connect()
-
-    mock_imap.assert_called_once_with("imap.gmail.com", 993)
-    mock_imap_instance.authenticate.assert_called_once()
-
-
-@patch("imaplib.IMAP4_SSL")
-def test_gmail_fetch_emails(mock_imap, email_example):
-    """Test fetching emails from Gmail."""
-    mock_imap_instance = mock_imap.return_value
-    mock_imap_instance.select.return_value = ("OK", [b"1"])
-    mock_imap_instance.search.return_value = ("OK", [b"1 2 3"])
-
-    mock_email_bytes = b"From: test@example.com\r\nSubject: Test\r\n\r\nTest body"
-    mock_imap_instance.fetch.return_value = (
-        "OK",
-        [(b"1", (b"RFC822", mock_email_bytes))],
-    )
-
-    retriever = GmailRetriever(username="test@example.com", password="password123")
-
-    with patch.object(retriever, "_parse_email") as mock_parse:
-        mock_parse.return_value = email_example
-        emails = retriever.fetch_emails(folder="INBOX", limit=1)
-
-        assert len(emails) == 1
-        assert emails[0]["subject"] == "Test Subject"
-
-        mock_imap_instance.select.assert_called_once_with("INBOX")
-        mock_imap_instance.search.assert_called_once()
-        mock_imap_instance.fetch.assert_called_once()
-
-
-@patch("imaplib.IMAP4_SSL")
-def test_gmail_fetch_emails_error_handling(mock_imap):
-    """Test error handling in email fetching."""
-    mock_imap_instance = mock_imap.return_value
-    mock_imap_instance.select.side_effect = Exception("Connection failed")
-
-    retriever = GmailRetriever(username="test@example.com", password="password123")
-
-    with raises(Exception):
-        retriever.fetch_emails(folder="INBOX", limit=1)
-
-
-def test_parse_email_metadata():
-    """Test email metadata conversion."""
-    retriever = GmailRetriever(username="test@example.com", password="password123")
-
-    email_data = {
-        "email_id": "12345",
-        "from_address": "sender@example.com",
-        "to_addresses": ["recipient@example.com"],
-        "subject": "Test Subject",
-        "date": "Mon, 1 Jan 2024 12:00:00 +0000",
-        "folder": "INBOX",
-        "attachments": ["document.pdf"],
-        "has_attachments": True,
-    }
-
-    metadata = retriever.get_email_metadata(email_data)
-
-    assert isinstance(metadata, EmailMetadata)
-    assert metadata.email_id == "12345"
-    assert metadata.subject == "Test Subject"
-    assert metadata.from_address == "sender@example.com"
-    assert metadata.has_attachments is True
-    assert len(metadata.attachments) == 1
-
-
-@patch("imaplib.IMAP4_SSL")
-def test_gmail_connection_error(mock_imap):
-    """Test connection error handling."""
-    mock_imap.side_effect = Exception("Connection failed")
-
-    retriever = GmailRetriever(username="test@example.com", password="password123")
-
-    with raises(Exception):
+    @patch("imaplib.IMAP4_SSL")
+    def test_connect_oauth2_auth(self, mock_imap) -> None:
+        """Test Gmail connection with OAuth2 authentication."""
+        retriever = GmailRetriever(username="test@example.com", access_token="token123")
         retriever.connect()
 
+        mock_imap.assert_called_once_with("imap.gmail.com", 993)
+        mock_imap.return_value.authenticate.assert_called_once()
 
-def test_gmail_retriever_empty_username():
-    """Test empty username raises ValueError."""
-    assert_raises_on_connect(GmailRetriever, username="")
-
-
-def test_gmail_retriever_long_username():
-    """Test long username is stored correctly."""
-    long_username = "a" * 300 + "@example.com"
-    retriever = GmailRetriever(username=long_username, password="password")
-    assert retriever.username == long_username
-
-
-def test_gmail_fetch_emails_error_conditions(email_example):
-    """Test Gmail retriever error conditions in fetch_emails."""
-    with patch("imaplib.IMAP4_SSL") as mock_imap:
-        mock_imap_instance = mock_imap.return_value
-        mock_imap_instance.select.return_value = ("OK", [b"1"])
-        mock_imap_instance.search.return_value = ("OK", [b"1 2 3"])
-
-        mock_imap_instance.fetch.return_value = ("OK", [])
+    @patch("imaplib.IMAP4_SSL")
+    def test_connection_error(self, mock_imap) -> None:
+        """Test connection error handling."""
+        mock_imap.side_effect = Exception("Connection failed")
 
         retriever = GmailRetriever(username="test@example.com", password="password123")
 
-        with patch.object(retriever, "_parse_email") as mock_parse:
+        with pytest.raises(Exception):
+            retriever.connect()
+
+
+class TestGmailRetrieverMetadata:
+    """Tests for email metadata conversion."""
+
+    def test_get_email_metadata(self, gmail_retriever_password) -> None:
+        """Test email metadata conversion from email data."""
+        email_data = FakeEmailGenerator.create_email_data(
+            email_id="12345",
+            from_addr="sender@example.com",
+            to_addrs=["recipient@example.com"],
+            subject="Test Subject",
+            has_attachments=True,
+            attachment_names=["document.pdf"],
+        )
+
+        metadata = gmail_retriever_password.get_email_metadata(email_data)
+
+        assert isinstance(metadata, EmailMetadata)
+        assert metadata.email_id == "12345"
+        assert metadata.subject == "Test Subject"
+        assert metadata.from_address == "sender@example.com"
+        assert metadata.has_attachments is True
+        assert len(metadata.attachments) == 1
+
+
+class TestGmailRetrieverParsing:
+    """Tests for email parsing functionality."""
+
+    def test_parse_email_no_content_disposition(self, gmail_retriever_password) -> None:
+        """Test email parsing with no Content-Disposition header."""
+        msg = FakeEmailGenerator.create_mime_message(
+            subject="Test Subject",
+            from_addr="sender@example.com",
+            to_addr="recipient@example.com",
+            has_attachment=False,
+        )
+
+        email_data = gmail_retriever_password._parse_email(msg, "123")
+
+        assert email_data["attachments"] == []
+        assert email_data["has_attachments"] is False
+
+    def test_parse_email_with_attachments(self, gmail_retriever_password) -> None:
+        """Test email parsing with attachments."""
+        msg = FakeEmailGenerator.create_mime_message(
+            subject="Test Subject with Attachment",
+            from_addr="sender@example.com",
+            to_addr="recipient@example.com",
+            has_attachment=True,
+            attachment_name="document.pdf",
+        )
+
+        email_data = gmail_retriever_password._parse_email(msg, "123")
+
+        assert len(email_data["attachments"]) == 1
+        assert "document.pdf" in email_data["attachments"]
+        assert email_data["has_attachments"] is True
+
+    def test_parse_multipart_without_attachment(self, gmail_retriever_password) -> None:
+        """Test email parsing with multipart but no attachments."""
+        msg = FakeEmailGenerator.create_mime_message(
+            subject="Test Subject",
+            has_attachment=False,
+        )
+
+        email_data = gmail_retriever_password._parse_email(msg, "123")
+
+        assert email_data["attachments"] == []
+        assert email_data["has_attachments"] is False
+
+
+class TestGmailRetrieverFetch:
+    """Tests for email fetching functionality."""
+
+    @patch("imaplib.IMAP4_SSL")
+    def test_fetch_emails_success(
+        self, mock_imap, gmail_retriever_password, email_example
+    ) -> None:
+        """Test fetching emails from Gmail successfully."""
+        mock_instance = mock_imap.return_value
+        mock_instance.select.return_value = ("OK", [b"1"])
+        mock_instance.search.return_value = ("OK", [b"1"])
+        mock_instance.fetch.return_value = (
+            "OK",
+            [
+                (
+                    b"1",
+                    (
+                        b"RFC822",
+                        b"From: test@example.com\r\nSubject: Test\r\n\r\nTest body",
+                    ),
+                )
+            ],
+        )
+
+        with patch.object(gmail_retriever_password, "_parse_email") as mock_parse:
             mock_parse.return_value = email_example
+            emails = gmail_retriever_password.fetch_emails(folder="INBOX", limit=1)
 
-            emails = retriever.fetch_emails(folder="INBOX", limit=1)
-            assert len(emails) == 0
+            assert len(emails) == 1
+            assert emails[0]["subject"] == "Test Subject"
 
+            mock_instance.select.assert_called_once_with("INBOX")
+            mock_instance.search.assert_called_once()
+            mock_instance.fetch.assert_called_once()
 
-def test_gmail_fetch_emails_invalid_msg_part(email_example):
-    """Test Gmail retriever with invalid msg_part structure."""
-    with patch("imaplib.IMAP4_SSL") as mock_imap:
-        mock_imap_instance = mock_imap.return_value
-        mock_imap_instance.select.return_value = ("OK", [b"1"])
-        mock_imap_instance.search.return_value = ("OK", [b"1"])
+    @patch("imaplib.IMAP4_SSL")
+    def test_fetch_emails_error_handling(
+        self, mock_imap, gmail_retriever_password
+    ) -> None:
+        """Test error handling in email fetching when connection fails."""
+        mock_instance = mock_imap.return_value
+        mock_instance.select.side_effect = Exception("Connection failed")
 
-        mock_imap_instance.fetch.return_value = ("OK", ["invalid_structure"])
+        with pytest.raises(Exception):
+            gmail_retriever_password.fetch_emails(folder="INBOX", limit=1)
 
-        retriever = GmailRetriever(username="test@example.com", password="password123")
+    @pytest.mark.parametrize("raw_email_type", ["bytes", "string"])
+    @patch("imaplib.IMAP4_SSL")
+    def test_fetch_emails_raw_email_types(
+        self,
+        mock_imap,
+        gmail_retriever_password,
+        raw_email_type: str,
+    ) -> None:
+        """Test fetching emails with different raw email content types."""
+        mock_instance = setup_mock_imap_for_fetch(mock_imap)
 
-        with patch.object(retriever, "_parse_email") as mock_parse:
-            mock_parse.return_value = email_example
+        if raw_email_type == "bytes":
+            raw_content = b"From: test@example.com\r\nSubject: Test\r\n\r\nTest body"
+        else:
+            raw_content = "From: test@example.com\r\nSubject: Test\r\n\r\nTest body"
 
-            emails = retriever.fetch_emails(folder="INBOX", limit=1)
-            assert len(emails) == 0
+        mock_instance.fetch.return_value = (
+            "OK",
+            [(b"1", (b"RFC822", raw_content))],
+        )
 
+        with patch.object(gmail_retriever_password, "_parse_email") as mock_parse:
+            mock_parse.return_value = FakeEmailGenerator.create_email_data()
+            emails = gmail_retriever_password.fetch_emails(folder="INBOX", limit=1)
 
-def test_parse_email_no_content_disposition():
-    """Test email parsing with no Content-Disposition."""
-    retriever = GmailRetriever(username="test@example.com", password="password123")
+            assert len(emails) == 1
+            mock_parse.assert_called_once()
 
-    msg = Message()
-    msg["subject"] = "Test Subject"
-    msg["from"] = "sender@example.com"
-    msg["to"] = "recipient@example.com"
-    msg["date"] = "Mon, 1 Jan 2024 12:00:00 +0000"
-    msg["X-GM-LABELS"] = "INBOX"
-    msg.set_payload("Test body")
+    @pytest.mark.parametrize(
+        "fetch_result,expected_count",
+        [
+            (("OK", []), 0),
+            (
+                ("OK", ["invalid_structure"]),
+                0,
+            ),
+            (("OK", [(b"1", None)]), 0),
+        ],
+    )
+    @patch("imaplib.IMAP4_SSL")
+    def test_fetch_emails_edge_cases(
+        self,
+        mock_imap,
+        gmail_retriever_password,
+        fetch_result: tuple,
+        expected_count: int,
+    ) -> None:
+        """Test Gmail retriever edge cases in fetch_emails."""
+        setup_mock_imap_for_fetch(
+            mock_imap,
+            fetch_result=fetch_result,
+        )
 
-    email_data = retriever._parse_email(msg, "123")
+        with patch.object(gmail_retriever_password, "_parse_email") as mock_parse:
+            mock_parse.return_value = FakeEmailGenerator.create_email_data()
 
-    assert email_data["attachments"] == []
-    assert email_data["has_attachments"] is False
+            emails = gmail_retriever_password.fetch_emails(folder="INBOX", limit=1)
+            assert len(emails) == expected_count
 
+            if expected_count == 0:
+                mock_parse.assert_not_called()
 
-def test_gmail_fetch_emails_select_folder_failure():
-    """Test Gmail retriever when folder selection fails."""
-    with patch("imaplib.IMAP4_SSL") as mock_imap:
-        mock_imap_instance = mock_imap.return_value
-        mock_imap_instance.select.return_value = ("NO", [b"Folder does not exist"])
+    @patch("imaplib.IMAP4_SSL")
+    def test_fetch_emails_select_folder_failure(
+        self, mock_imap, gmail_retriever_password
+    ) -> None:
+        """Test Gmail retriever when folder selection fails."""
+        setup_mock_imap_for_fetch(
+            mock_imap,
+            select_result=("NO", [b"Folder does not exist"]),
+        )
 
-        retriever = GmailRetriever(username="test@example.com", password="password123")
-
-        with raises(Exception) as exc_info:
-            retriever.fetch_emails(folder="NONEXISTENT", limit=1)
+        with pytest.raises(Exception) as exc_info:
+            gmail_retriever_password.fetch_emails(folder="NONEXISTENT", limit=1)
 
         assert "Failed to select folder: NONEXISTENT" in str(exc_info.value)
 
+    @patch("imaplib.IMAP4_SSL")
+    def test_fetch_emails_search_failure(
+        self, mock_imap, gmail_retriever_password
+    ) -> None:
+        """Test Gmail retriever when email search fails."""
+        setup_mock_imap_for_fetch(
+            mock_imap,
+            search_result=("NO", [b"Search failed"]),
+        )
 
-def test_gmail_fetch_emails_search_failure():
-    """Test Gmail retriever when email search fails."""
-    with patch("imaplib.IMAP4_SSL") as mock_imap:
-        mock_imap_instance = mock_imap.return_value
-        mock_imap_instance.select.return_value = ("OK", [b"1"])
-        mock_imap_instance.search.return_value = ("NO", [b"Search failed"])
-
-        retriever = GmailRetriever(username="test@example.com", password="password123")
-
-        with raises(Exception) as exc_info:
-            retriever.fetch_emails(folder="INBOX", limit=1)
+        with pytest.raises(Exception) as exc_info:
+            gmail_retriever_password.fetch_emails(folder="INBOX", limit=1)
 
         assert "Failed to search emails" in str(exc_info.value)
 
-
-def test_gmail_fetch_emails_fetch_failure(email_example):
-    """Test Gmail retriever when email fetch fails."""
-    with patch("imaplib.IMAP4_SSL") as mock_imap:
-        mock_imap_instance = mock_imap.return_value
-        mock_imap_instance.select.return_value = ("OK", [b"1"])
-        mock_imap_instance.search.return_value = ("OK", [b"1"])
-        mock_imap_instance.fetch.return_value = ("NO", [b"Fetch failed"])
-
-        retriever = GmailRetriever(username="test@example.com", password="password123")
-
-        with patch.object(retriever, "_parse_email") as mock_parse:
-            mock_parse.return_value = email_example
-
-            emails = retriever.fetch_emails(folder="INBOX", limit=1)
-            assert len(emails) == 0
-            mock_parse.assert_not_called()
-
-
-def test_gmail_fetch_emails_empty_msg_data(email_example):
-    """Test Gmail retriever with empty msg_data."""
-    with patch("imaplib.IMAP4_SSL") as mock_imap:
-        mock_imap_instance = mock_imap.return_value
-        mock_imap_instance.select.return_value = ("OK", [b"1"])
-        mock_imap_instance.search.return_value = ("OK", [b"1"])
-        mock_imap_instance.fetch.return_value = ("OK", [])
-
-        retriever = GmailRetriever(username="test@example.com", password="password123")
-
-        with patch.object(retriever, "_parse_email") as mock_parse:
-            mock_parse.return_value = email_example
-
-            emails = retriever.fetch_emails(folder="INBOX", limit=1)
-            assert len(emails) == 0
-            mock_parse.assert_not_called()
-
-
-def test_gmail_fetch_emails_invalid_msg_part_structure(email_example):
-    """Test Gmail retriever with invalid msg_part structure."""
-    with patch("imaplib.IMAP4_SSL") as mock_imap:
-        mock_imap_instance = mock_imap.return_value
-        mock_imap_instance.select.return_value = ("OK", [b"1"])
-        mock_imap_instance.search.return_value = ("OK", [b"1"])
-        mock_imap_instance.fetch.return_value = ("OK", ["invalid_structure"])
-
-        retriever = GmailRetriever(username="test@example.com", password="password123")
-
-        with patch.object(retriever, "_parse_email") as mock_parse:
-            mock_parse.return_value = email_example
-
-            emails = retriever.fetch_emails(folder="INBOX", limit=1)
-            assert len(emails) == 0
-            mock_parse.assert_not_called()
-
-
-def test_gmail_fetch_emails_string_raw_email(email_example):
-    """Test Gmail retriever with string raw_email (non-bytes)."""
-    with patch("imaplib.IMAP4_SSL") as mock_imap:
-        mock_imap_instance = mock_imap.return_value
-        mock_imap_instance.select.return_value = ("OK", [b"1"])
-        mock_imap_instance.search.return_value = ("OK", [b"1"])
-        mock_imap_instance.fetch.return_value = (
-            "OK",
-            [(b"1", (b"RFC822", "string email content"))],
+    @patch("imaplib.IMAP4_SSL")
+    def test_fetch_emails_fetch_failure(
+        self, mock_imap, gmail_retriever_password
+    ) -> None:
+        """Test Gmail retriever when email fetch fails."""
+        setup_mock_imap_for_fetch(
+            mock_imap,
+            fetch_result=("NO", [b"Fetch failed"]),
         )
 
-        retriever = GmailRetriever(username="test@example.com", password="password123")
+        with patch.object(gmail_retriever_password, "_parse_email") as mock_parse:
+            mock_parse.return_value = FakeEmailGenerator.create_email_data()
 
-        with patch.object(retriever, "_parse_email") as mock_parse:
-            mock_parse.return_value = email_example
-
-            emails = retriever.fetch_emails(folder="INBOX", limit=1)
-            assert len(emails) == 1
-            mock_parse.assert_called_once()
-
-
-def test_parse_email_with_attachments():
-    """Test email parsing with attachments."""
-    retriever = GmailRetriever(username="test@example.com", password="password123")
-
-    msg = MIMEMultipart()
-    msg["subject"] = "Test Subject with Attachment"
-    msg["from"] = "sender@example.com"
-    msg["to"] = "recipient@example.com"
-    msg["date"] = "Mon, 1 Jan 2024 12:00:00 +0000"
-    msg["X-GM-LABELS"] = "INBOX"
-
-    text_part = MIMEText("Test body")
-    msg.attach(text_part)
-
-    attachment = MIMEApplication(b"attachment content", _subtype="pdf")
-    attachment.add_header("Content-Disposition", "attachment", filename="document.pdf")
-    msg.attach(attachment)
-
-    email_data = retriever._parse_email(msg, "123")
-
-    assert len(email_data["attachments"]) == 1
-    assert "document.pdf" in email_data["attachments"]
-    assert email_data["has_attachments"] is True
-
-
-def test_parse_email_multipart_without_attachment():
-    """Test email parsing with multipart but no attachments."""
-    retriever = GmailRetriever(username="test@example.com", password="password123")
-
-    msg = MIMEMultipart()
-    msg["subject"] = "Test Subject"
-    msg["from"] = "sender@example.com"
-    msg["to"] = "recipient@example.com"
-    msg["date"] = "Mon, 1 Jan 2024 12:00:00 +0000"
-    msg["X-GM-LABELS"] = "INBOX"
-
-    text_part = MIMEText("Test body")
-    msg.attach(text_part)
-
-    email_data = retriever._parse_email(msg, "123")
-
-    assert email_data["attachments"] == []
-    assert email_data["has_attachments"] is False
-
-
-def test_gmail_fetch_emails_bytes_raw_email(email_example):
-    """Test Gmail retriever with bytes raw_email."""
-    with patch("imaplib.IMAP4_SSL") as mock_imap:
-        mock_imap_instance = mock_imap.return_value
-        mock_imap_instance.select.return_value = ("OK", [b"1"])
-        mock_imap_instance.search.return_value = ("OK", [b"1"])
-        mock_email_bytes = b"From: test@example.com\r\nSubject: Test\r\n\r\nTest body"
-        mock_imap_instance.fetch.return_value = (
-            "OK",
-            [(b"1", (b"RFC822", mock_email_bytes))],
-        )
-
-        retriever = GmailRetriever(username="test@example.com", password="password123")
-
-        with patch.object(retriever, "_parse_email") as mock_parse:
-            mock_parse.return_value = email_example
-
-            emails = retriever.fetch_emails(folder="INBOX", limit=1)
-            assert len(emails) == 1
-            mock_parse.assert_called_once()
+            emails = gmail_retriever_password.fetch_emails(folder="INBOX", limit=1)
+            assert len(emails) == 0
+            mock_parse.assert_not_called()
