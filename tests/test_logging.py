@@ -96,20 +96,15 @@ class TestLoggingConfiguration:
         setup_logging()
 
         sink = StringIO()
-        # Add handler with INFO level (same as default)
         handler_id = log.add(sink, level="INFO", format="{message}")
 
         try:
-            # Send debug message
             log.debug("This debug message should not appear")
 
-            # Send info message (should appear)
             log.info("This info message should appear")
 
             output = sink.getvalue()
-            # Debug should be suppressed
             assert "This debug message should not appear" not in output
-            # Info should appear
             assert "This info message should appear" in output
         finally:
             log.remove(handler_id)

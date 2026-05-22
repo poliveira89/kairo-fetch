@@ -25,6 +25,7 @@ wheels/
 *.egg
 MANIFEST
 poetry.lock
+pytest-of-**/
 
 # Installer logs
 pip-log.txt

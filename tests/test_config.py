@@ -14,8 +14,7 @@ def test_config_has_expected_attributes():
     """Test that Config has expected attributes."""
     Config.reset()
     config = Config()
-    # Add assertions for expected attributes once they're defined
-    # For now, just test that it initializes successfully
+
     assert hasattr(config, "__dict__")
 
 
@@ -89,7 +88,7 @@ def test_config_reset():
     config1 = Config()
     Config.reset()
     config2 = Config()
-    # After reset, config2 should be a new instance
+
     assert config1 is not config2
     Config.reset()
 

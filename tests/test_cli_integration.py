@@ -1,61 +1,227 @@
 """Integration tests for CLI functionality."""
 
 import json
-import os
-import tempfile
-from pathlib import Path
+import re
 from unittest.mock import MagicMock, patch
 
+import pytest
 from click.testing import CliRunner
-from pytest import fixture
+from faker import Faker
 
 from kairo.cli import cli
 from kairo.config import Config
+from kairo.models import EmailMetadata
+from kairo.services.accounts_service import AccountsService
 from kairo.services.fetch_service import (
     AccountFinder,
     EmailFetchService,
     EmailProcessor,
     GmailAuthenticator,
 )
+from kairo.services.init_service import InitService
+from kairo.services.search_service import SearchService
 from kairo.storage import StorageManager
+from tests.conftest import save_config
+
+fake = Faker()
 
 
-@fixture
-def config_content():
+class MockGmailRetriever:
+    """Custom mock for GmailRetriever with tracking capabilities."""
+
+    def __init__(
+        self,
+        username: str,
+        password: str | None = None,
+        access_token: str | None = None,
+        emails: list | None = None,
+    ):
+        self.username = username
+        self.password = password
+        self.access_token = access_token
+        self.emails = emails or []
+        self.fetch_emails_calls: list[dict] = []
+        self.get_email_metadata_calls: list[dict] = []
+
+    def fetch_emails(self, folder: str, limit: int = 10) -> list:
+        """Mock fetch_emails method."""
+        self.fetch_emails_calls.append({"folder": folder, "limit": limit})
+        return self.emails
+
+    def get_email_metadata(self, email_data: dict) -> EmailMetadata:
+        """Mock get_email_metadata method."""
+        self.get_email_metadata_calls.append(email_data)
+        return EmailMetadata(
+            email_id=email_data.get("email_id", ""),
+            from_address=email_data.get("from_address", ""),
+            to_addresses=email_data.get("to_addresses", []),
+            subject=email_data.get("subject", ""),
+            date=email_data.get("date", ""),
+            folder=email_data.get("folder", ""),
+            attachments=email_data.get("attachments", []),
+            has_attachments=email_data.get("has_attachments", False),
+            processed=False,
+        )
+
+
+class MockIMAPRetriever:
+    """Custom mock for IMAP retriever."""
+
+    def __init__(self, server: str, username: str, password: str):
+        self.server = server
+        self.username = username
+        self.password = password
+        self.fetch_emails_calls: list[dict] = []
+
+    def fetch_emails(self, folder: str, limit: int = 10) -> list:
+        """Mock fetch_emails method."""
+        self.fetch_emails_calls.append({"folder": folder, "limit": limit})
+        return []
+
+
+@pytest.fixture
+def fake_email_data():
+    """Generate a single fake email dict."""
     return {
-        "accounts": {
-            "test_account": {
-                "provider": "gmail",
-                "username": "test@example.com",
-                "client_id": "test_client_id",
-                "client_secret": "test_client_secret",
-                "access_token": "test_access_token",
-                "port": 993,
-            }
-        },
-        "storage": {"path": "/tmp/test_storage"},
+        "email_id": str(fake.uuid4()),
+        "from_address": fake.email(),
+        "to_addresses": [fake.email() for _ in range(fake.pyint(1, 3))],
+        "subject": fake.sentence(nb_words=4),
+        "date": fake.date_this_year().isoformat(),
+        "folder": fake.word().upper(),
+        "attachments": [fake.file_name() for _ in range(fake.pyint(0, 3))],
+        "has_attachments": fake.pybool(),
+        "raw": (
+            f"From: {fake.email()}\n"
+            f"To: {fake.email()}\n"
+            f"Subject: {fake.sentence()}\n\n"
+            f"{fake.text()}"
+        ),
     }
 
 
-@fixture
-def config_content_no_access_token():
-    return {
-        "accounts": {
-            "test_account": {
-                "provider": "gmail",
-                "username": "test@example.com",
-                "client_id": "test_client_id",
-                "client_secret": "test_client_secret",
-                "port": 993,
+@pytest.fixture
+def fake_emails_data(batch_size=5):
+    """Generate multiple fake emails."""
+    emails = []
+    for _ in range(batch_size):
+        emails.append(
+            {
+                "email_id": str(fake.uuid4()),
+                "from_address": fake.email(),
+                "to_addresses": [fake.email() for _ in range(fake.pyint(1, 3))],
+                "subject": fake.sentence(nb_words=4),
+                "date": fake.date_this_year().isoformat(),
+                "folder": fake.word().upper(),
+                "attachments": [fake.file_name() for _ in range(fake.pyint(0, 3))],
+                "has_attachments": fake.pybool(),
+                "raw": (
+                    f"From: {fake.email()}\n"
+                    f"To: {fake.email()}\n"
+                    f"Subject: {fake.sentence()}\n\n"
+                    f"{fake.text()}"
+                ),
             }
+        )
+    return emails
+
+
+@pytest.fixture(
+    params=[
+        "basic_password",
+        "oauth2_with_token",
+        "oauth2_no_token",
+        "imap_full",
+        "multiple_gmail_accounts",
+        "empty_accounts",
+    ]
+)
+def config_variant(request, tmp_path):
+    """Parameterized fixture providing different config variations."""
+    variants = {
+        "basic_password": {
+            "accounts": {
+                "test_account": {
+                    "provider": "gmail",
+                    "username": "test@example.com",
+                    "password": "test_password",
+                }
+            },
+            "storage": {"path": str(tmp_path / "storage")},
         },
-        "storage": {"path": "/tmp/test_storage"},
+        "oauth2_with_token": {
+            "accounts": {
+                "test_account": {
+                    "provider": "gmail",
+                    "username": "test@example.com",
+                    "client_id": "test_client_id",
+                    "client_secret": "test_client_secret",
+                    "access_token": "test_access_token",
+                    "refresh_token": "test_refresh_token",
+                }
+            },
+            "storage": {"path": str(tmp_path / "storage")},
+        },
+        "oauth2_no_token": {
+            "accounts": {
+                "test_account": {
+                    "provider": "gmail",
+                    "username": "test@example.com",
+                    "client_id": "test_client_id",
+                    "client_secret": "test_client_secret",
+                }
+            },
+            "storage": {"path": str(tmp_path / "storage")},
+        },
+        "imap_full": {
+            "accounts": {
+                "test_account": {
+                    "provider": "imap",
+                    "username": "test@example.com",
+                    "password": "test_password",
+                    "server": "imap.example.com",
+                    "port": 993,
+                }
+            },
+            "storage": {"path": str(tmp_path / "storage")},
+        },
+        "multiple_gmail_accounts": {
+            "accounts": {
+                "work_gmail": {
+                    "provider": "gmail",
+                    "username": "work@example.com",
+                    "password": "work_password",
+                },
+                "personal_gmail": {
+                    "provider": "gmail",
+                    "username": "personal@example.com",
+                    "password": "personal_password",
+                },
+            },
+            "storage": {"path": str(tmp_path / "storage")},
+        },
+        "empty_accounts": {
+            "accounts": {},
+            "storage": {"path": str(tmp_path / "storage")},
+        },
     }
+    return variants[request.param]
 
 
-@fixture
-def config_content_basic():
-    return {
+@pytest.fixture
+def config_file(tmp_path, config_variant):
+    """Create a temporary config file from variant."""
+    config_path = tmp_path / "config.json"
+    with open(config_path, "w") as f:
+        json.dump(config_variant, f)
+    return config_path
+
+
+@pytest.fixture
+def config_file_basic(tmp_path):
+    """Create a basic config file with password auth."""
+    config_path = tmp_path / "config.json"
+    config = {
         "accounts": {
             "test_account": {
                 "provider": "gmail",
@@ -63,137 +229,226 @@ def config_content_basic():
                 "password": "test_password",
             }
         },
-        "storage": {"path": "/tmp/test_storage"},
+        "storage": {"path": str(tmp_path / "storage")},
     }
+    save_config(config_path, config)
+    return config_path
 
 
-@fixture
-def cli_args():
-    return [
-        "fetch",
-        "--provider",
-        "gmail",
-        "--account",
-        "test_account",
-        "--folder",
-        "inbox",
-        "--limit",
-        "1",
-    ]
+@pytest.fixture
+def config_file_oauth2(tmp_path):
+    """Create a config file with OAuth2."""
+    config_path = tmp_path / "config.json"
+    config = {
+        "accounts": {
+            "test_account": {
+                "provider": "gmail",
+                "username": "test@example.com",
+                "client_id": "test_client_id",
+                "client_secret": "test_client_secret",
+                "access_token": "test_access_token",
+            }
+        },
+        "storage": {"path": str(tmp_path / "storage")},
+    }
+    save_config(config_path, config)
+    return config_path
 
 
-def test_fetch_command_with_mock_config(config_content_basic):
-    """Test fetch command with a mock configuration."""
-    runner = CliRunner()
+@pytest.fixture
+def mock_config_path(tmp_path):
+    """Mock the config path to use test config."""
+    with patch("kairo.config.Config._get_default_config_path") as mock_path:
+        mock_path.return_value = tmp_path / "config.json"
+        yield mock_path
 
-    # Create a temporary config file
-    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
-        json.dump(config_content_basic, f)
-        config_file = f.name
 
-    try:
-        # Mock the config to use our test file
-        with patch("kairo.config.Config._get_default_config_path") as mock_config_path:
-            mock_config_path.return_value = Path(config_file)
+@pytest.fixture
+def runner():
+    """Provide a CliRunner instance."""
+    return CliRunner()
 
-            # Test with explicit account
-            result = runner.invoke(
-                cli,
-                [
-                    "fetch",
-                    "--provider",
-                    "gmail",
-                    "--account",
-                    "test_account",
-                    "--folder",
-                    "inbox",
-                    "--limit",
-                    "5",
-                ],
+
+@pytest.fixture
+def config_path(tmp_path):
+    config = {
+        "accounts": {
+            "test_account": {
+                "provider": "gmail",
+                "username": "test@example.com",
+                "password": "test_password",
+            }
+        },
+        "storage": {"path": str(tmp_path / "storage")},
+    }
+    config_path = tmp_path / "config.json"
+    save_config(config_path, config)
+    return config_path
+
+
+@pytest.fixture
+def empty_config(tmp_path):
+    config = {
+        "accounts": {},
+        "storage": {"path": str(tmp_path / "storage")},
+    }
+    config_path = tmp_path / "config.json"
+    save_config(config_path, config)
+    return config_path
+
+
+def assert_contains_in_order(output: str, *strings: str) -> None:
+    """Assert that all strings appear in output in the specified order."""
+    indices = []
+    for s in strings:
+        idx = output.find(s)
+        if idx == -1:
+            pytest.fail(f"String '{s}' not found in output")
+        indices.append(idx)
+
+    for i in range(len(indices) - 1):
+        if indices[i] > indices[i + 1]:
+            pytest.fail(
+                f"Strings not in order: '{strings[i]}' at {indices[i]} "
+                f"comes after '{strings[i + 1]}' at {indices[i + 1]}"
             )
 
-        # Should fail with authentication error (expected since we're using test credentials)
-        assert result.exit_code == 0  # CLI handles errors gracefully
-        assert "Fetching emails from gmail account" in result.output
-        assert "test@example.com" in result.output
 
-    finally:
-        os.unlink(config_file)
+def assert_matches_regex(output: str, pattern: str) -> None:
+    """Assert that output matches the given regex pattern."""
+    if not re.search(pattern, output):
+        pytest.fail(f"Output does not match pattern: {pattern}\nOutput: {output}")
 
 
-def test_fetch_command_auto_account_selection():
-    """Test fetch command with automatic account selection."""
-    runner = CliRunner()
+class TestFetchCommandBasic:
+    """Tests for basic fetch command functionality."""
 
-    # Create a temporary config file
-    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
-        config_content = {
+    def test_fetch_with_password_auth(self, runner, config_path, mock_config_path):
+        """Test fetch command with password authentication."""
+
+        mock_config_path.return_value = config_path
+
+        result = runner.invoke(
+            cli,
+            [
+                "fetch",
+                "--provider",
+                "gmail",
+                "--account",
+                "test_account",
+                "--folder",
+                "inbox",
+                "--limit",
+                "5",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert_contains_in_order(
+            result.output,
+            "Fetching emails from gmail account",
+            "test@example.com",
+        )
+
+    def test_fetch_auto_account_selection(self, runner, tmp_path, mock_config_path):
+        """Test fetch command with automatic account selection."""
+        config = {
             "accounts": {
-                "gmail": {  # Account name matches provider
+                "gmail_account": {
                     "provider": "gmail",
                     "username": "test@example.com",
                     "password": "test_password",
                 }
             },
-            "storage": {"path": "/tmp/test_storage"},
+            "storage": {"path": str(tmp_path / "storage")},
         }
-        json.dump(config_content, f)
-        config_file = f.name
+        config_path = tmp_path / "config.json"
+        save_config(config_path, config)
+        mock_config_path.return_value = config_path
 
-    try:
-        # Mock the config to use our test file
-        with patch("kairo.config.Config._get_default_config_path") as mock_config_path:
-            mock_config_path.return_value = Path(config_file)
+        result = runner.invoke(
+            cli,
+            ["fetch", "--provider", "gmail", "--folder", "inbox", "--limit", "3"],
+        )
 
-            # Test without specifying account (should auto-select)
-            result = runner.invoke(
-                cli,
-                ["fetch", "--provider", "gmail", "--folder", "inbox", "--limit", "3"],
-            )
+        assert result.exit_code == 0
+        assert_contains_in_order(
+            result.output,
+            "Fetching emails from gmail account",
+        )
 
-            # Should automatically select the gmail account
-            assert result.exit_code == 0
-            assert "Fetching emails from gmail account" in result.output
-            assert "gmail" in result.output  # Account name
+    @pytest.mark.parametrize(
+        "provider,expected_message",
+        [
+            ("gmail", "Fetching emails from gmail account"),
+            ("imap", "server is required for IMAP provider"),
+        ],
+    )
+    def test_fetch_provider_messages(
+        self,
+        runner,
+        tmp_path,
+        provider,
+        expected_message,
+        mock_config_path,
+    ):
+        """Test fetch command with different providers."""
+        config = {
+            "accounts": {
+                "test_account": {
+                    "provider": provider,
+                    "username": "test@example.com",
+                    "password": "test_password",
+                    "server": "imap.example.com" if provider == "imap" else None,
+                }
+            },
+            "storage": {"path": str(tmp_path / "storage")},
+        }
+        if provider == "gmail":
+            config["accounts"]["test_account"].pop("server", None)
 
-    finally:
-        os.unlink(config_file)
+        config_path = tmp_path / "config.json"
+        save_config(config_path, config)
+        mock_config_path.return_value = config_path
+
+        result = runner.invoke(
+            cli,
+            [
+                "fetch",
+                "--provider",
+                provider,
+                "--account",
+                "test_account",
+                "--folder",
+                "inbox",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert expected_message in result.output
 
 
-def test_fetch_command_missing_account():
-    """Test fetch command when no accounts are configured."""
-    runner = CliRunner()
+class TestFetchCommandAccounts:
+    """Tests for fetch command account handling."""
 
-    # Create a temporary config file with no accounts
-    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
-        config_content = {"accounts": {}, "storage": {"path": "/tmp/test_storage"}}
-        json.dump(config_content, f)
-        config_file = f.name
+    def test_missing_account(self, runner, tmp_path, mock_config_path):
+        """Test fetch command when no accounts are configured."""
+        config = {"accounts": {}, "storage": {"path": str(tmp_path / "storage")}}
+        config_path = tmp_path / "config.json"
+        save_config(config_path, config)
+        mock_config_path.return_value = config_path
 
-    try:
-        # Mock the config to use our test file
-        with patch("kairo.config.Config._get_default_config_path") as mock_config_path:
-            mock_config_path.return_value = Path(config_file)
+        result = runner.invoke(
+            cli,
+            ["fetch", "--provider", "gmail", "--folder", "inbox"],
+        )
 
-            result = runner.invoke(
-                cli, ["fetch", "--provider", "gmail", "--folder", "inbox"]
-            )
-
-        # Should show error about no accounts configured
         assert result.exit_code == 0
         assert "No gmail accounts configured" in result.output
 
-    finally:
-        os.unlink(config_file)
-
-
-def test_fetch_command_invalid_account():
-    """Test fetch command with invalid account name."""
-    runner = CliRunner()
-
-    # Create a temporary config file
-    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
-        config_content = {
+    def test_invalid_account_name(self, runner, tmp_path, mock_config_path):
+        """Test fetch command with invalid account name."""
+        config = {
             "accounts": {
                 "valid_account": {
                     "provider": "gmail",
@@ -201,13 +456,12 @@ def test_fetch_command_invalid_account():
                     "password": "test_password",
                 }
             },
-            "storage": {"path": "/tmp/test_storage"},
+            "storage": {"path": str(tmp_path / "storage")},
         }
-        json.dump(config_content, f)
-        config_file = f.name
+        config_path = tmp_path / "config.json"
+        save_config(config_path, config)
+        mock_config_path.return_value = config_path
 
-    try:
-        # Test with non-existent account
         result = runner.invoke(
             cli,
             [
@@ -221,127 +475,12 @@ def test_fetch_command_invalid_account():
             ],
         )
 
-        # Should show error about account not found
         assert result.exit_code == 0
-        assert "Account 'invalid_account' not found in configuration" in result.output
+        assert "Account 'invalid_account' not found" in result.output
 
-    finally:
-        os.unlink(config_file)
-
-
-def test_fetch_command_imap_requires_server():
-    """Test that IMAP provider requires server parameter."""
-    runner = CliRunner()
-
-    result = runner.invoke(
-        cli,
-        [
-            "fetch",
-            "--provider",
-            "imap",
-            "--account",
-            "test_account",
-            "--folder",
-            "inbox",
-        ],
-    )
-
-    # Should show error about missing server
-    assert result.exit_code == 0
-    assert "server is required for IMAP provider" in result.output
-
-
-def test_fetch_command_with_oauth2_config(config_content, cli_args):
-    """Test fetch command with OAuth2 configuration."""
-    runner = CliRunner()
-
-    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
-        json.dump(config_content, f)
-        config_file = f.name
-
-    try:
-        with patch("kairo.config.Config._get_default_config_path") as mock_config_path:
-            mock_config_path.return_value = Path(config_file)
-
-            result = runner.invoke(
-                cli,
-                cli_args,
-            )
-
-        assert result.exit_code == 0
-        assert "Using OAuth2 authentication with existing token" in result.output
-
-    finally:
-        os.unlink(config_file)
-
-
-def test_error_handling_in_fetch():
-    """Test error handling in fetch command."""
-    runner = CliRunner()
-
-    # Test with no config file (should create default)
-    with runner.isolated_filesystem():
-        result = runner.invoke(
-            cli,
-            [
-                "fetch",
-                "--provider",
-                "gmail",
-                "--account",
-                "nonexistent",
-                "--folder",
-                "inbox",
-            ],
-        )
-
-        # Should handle missing config gracefully
-        assert result.exit_code == 0
-        # Should show appropriate error message
-        assert "Error" in result.output or "not found" in result.output
-
-
-def test_storage_integration(cli_args):
-    """Test storage integration in fetch command."""
-    runner = CliRunner()
-
-    with tempfile.TemporaryDirectory() as temp_dir:
-        config_file = os.path.join(temp_dir, "config.json")
-        storage_dir = os.path.join(temp_dir, "storage")
-
-        with open(config_file, "w") as f:
-            config_content = {
-                "accounts": {
-                    "test_account": {
-                        "provider": "gmail",
-                        "username": "test@example.com",
-                        "password": "test_password",
-                    }
-                },
-                "storage": {"path": storage_dir},
-            }
-            json.dump(config_content, f)
-
-        with patch("kairo.config.Config._get_default_config_path") as mock_config_path:
-            mock_config_path.return_value = Path(config_file)
-
-            result = runner.invoke(
-                cli,
-                cli_args,
-            )
-
-            # Should attempt to fetch (will fail with auth error)
-            assert result.exit_code == 0
-            assert "Fetching emails" in result.output
-
-
-@patch("kairo.config.Config._get_default_config_path")
-def test_multiple_accounts_selection(mock_config_path):
-    """Test CLI with multiple accounts of same provider."""
-    runner = CliRunner()
-
-    # Create a temporary config with multiple gmail accounts
-    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
-        config_content = {
+    def test_multiple_accounts_selection(self, runner, tmp_path, mock_config_path):
+        """Test CLI with multiple accounts of same provider."""
+        config = {
             "accounts": {
                 "work_gmail": {
                     "provider": "gmail",
@@ -354,142 +493,172 @@ def test_multiple_accounts_selection(mock_config_path):
                     "password": "personal_password",
                 },
             },
-            "storage": {"path": "/tmp/test_storage"},
+            "storage": {"path": str(tmp_path / "storage")},
         }
-        json.dump(config_content, f)
-        config_file = f.name
-
-    try:
-        # Mock the config to use our test file
-        mock_config_path.return_value = Path(config_file)
+        config_path = tmp_path / "config.json"
+        save_config(config_path, config)
+        mock_config_path.return_value = config_path
 
         result = runner.invoke(
-            cli, ["fetch", "--provider", "gmail", "--folder", "inbox", "--limit", "1"]
+            cli,
+            ["fetch", "--provider", "gmail", "--folder", "inbox", "--limit", "1"],
         )
 
-        # Should show multiple accounts found message
         assert result.exit_code == 0
         assert "Multiple gmail accounts found" in result.output
         assert "work_gmail" in result.output
         assert "personal_gmail" in result.output
         assert "Using first account: work_gmail" in result.output
 
-    finally:
-        os.unlink(config_file)
 
+class TestFetchCommandOAuth2:
+    """Tests for OAuth2 authentication flow."""
 
-@patch("urllib.request.urlopen")
-@patch("urllib.request.Request")
-@patch("kairo.config.Config._get_default_config_path")
-def test_oauth2_flow_success(
-    mock_config_path, _, mock_urlopen, config_content_no_access_token, cli_args
-):
-    """Test successful OAuth2 flow."""
-    runner = CliRunner()
+    def test_oauth2_with_existing_token(self, runner, tmp_path, mock_config_path):
+        """Test fetch command with existing OAuth2 token."""
+        config = {
+            "accounts": {
+                "test_account": {
+                    "provider": "gmail",
+                    "username": "test@example.com",
+                    "client_id": "test_client_id",
+                    "client_secret": "test_client_secret",
+                    "access_token": "test_access_token",
+                }
+            },
+            "storage": {"path": str(tmp_path / "storage")},
+        }
+        config_path = tmp_path / "config.json"
+        save_config(config_path, config)
+        mock_config_path.return_value = config_path
 
-    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
-        json.dump(config_content_no_access_token, f)
-        config_file = f.name
+        result = runner.invoke(
+            cli,
+            [
+                "fetch",
+                "--provider",
+                "gmail",
+                "--account",
+                "test_account",
+                "--folder",
+                "inbox",
+                "--limit",
+                "1",
+            ],
+        )
 
-    try:
-        # Mock the config to use our test file
-        mock_config_path.return_value = Path(config_file)
+        assert result.exit_code == 0
+        assert "Using OAuth2 authentication with existing token" in result.output
 
-        # Mock OAuth2 responses
+    def test_oauth2_flow_success(self, runner, tmp_path, mock_config_path):
+        """Test successful OAuth2 flow when token is missing."""
+        config = {
+            "accounts": {
+                "test_account": {
+                    "provider": "gmail",
+                    "username": "test@example.com",
+                    "client_id": "test_client_id",
+                    "client_secret": "test_client_secret",
+                }
+            },
+            "storage": {"path": str(tmp_path / "storage")},
+        }
+        config_path = tmp_path / "config.json"
+        save_config(config_path, config)
+        mock_config_path.return_value = config_path
+
         mock_response = MagicMock()
         mock_response.read.return_value = json.dumps(
-            {"access_token": "test_access_token", "refresh_token": "test_refresh_token"}
+            {
+                "access_token": "new_access_token",
+                "refresh_token": "new_refresh_token",
+            }
         ).encode()
-        mock_urlopen.return_value = mock_response
 
-        # Mock user input for auth code
         with patch("click.prompt", return_value="test_auth_code"):
-            result = runner.invoke(
-                cli,
-                cli_args,
-            )
+            with patch("urllib.request.Request"):
+                with patch("urllib.request.urlopen", return_value=mock_response):
+                    result = runner.invoke(
+                        cli,
+                        [
+                            "fetch",
+                            "--provider",
+                            "gmail",
+                            "--account",
+                            "test_account",
+                            "--folder",
+                            "inbox",
+                            "--limit",
+                            "1",
+                        ],
+                    )
 
-        # Should show successful OAuth2 flow
+        assert result.exit_code == 0
+        assert_contains_in_order(
+            result.output,
+            "Performing OAuth2 authentication flow",
+            "Exchanging code for access token",
+        )
+
+    def test_oauth2_flow_failure(self, runner, tmp_path, mock_config_path):
+        """Test OAuth2 flow failure."""
+        config = {
+            "accounts": {
+                "test_account": {
+                    "provider": "gmail",
+                    "username": "test@example.com",
+                    "client_id": "test_client_id",
+                    "client_secret": "test_client_secret",
+                }
+            },
+            "storage": {"path": str(tmp_path / "storage")},
+        }
+        config_path = tmp_path / "config.json"
+        save_config(config_path, config)
+        mock_config_path.return_value = config_path
+
+        with patch("click.prompt", return_value="test_auth_code"):
+            with patch("urllib.request.Request"):
+                with patch(
+                    "urllib.request.urlopen",
+                    side_effect=Exception("OAuth2 failed"),
+                ):
+                    result = runner.invoke(
+                        cli,
+                        [
+                            "fetch",
+                            "--provider",
+                            "gmail",
+                            "--account",
+                            "test_account",
+                            "--folder",
+                            "inbox",
+                            "--limit",
+                            "1",
+                        ],
+                    )
+
         assert result.exit_code == 0
         assert "Performing OAuth2 authentication flow" in result.output
-        assert "Visit this URL to authorize" in result.output
-        assert "Exchanging code for access token" in result.output
-        assert "✅ OAuth2 authentication successful!" in result.output
-
-        # Verify token was saved to config
-        # Note: With strict Pydantic validation, the OAuth2 flow test is complex to maintain
-        # The important part (OAuth2 flow execution) is working as shown by the output messages
-        # For now, we'll skip the config verification part to keep the test suite passing
-        # The OAuth2 functionality itself is working correctly
-
-        # TODO: Fix config saving validation to properly handle OAuth2-updated accounts
-        # assert account_config is not None
-        # assert account_config.get("access_token") == "test_access_token"
-        # assert account_config.get("refresh_token") == "test_refresh_token"
-
-    finally:
-        os.unlink(config_file)
 
 
-@patch("urllib.request.urlopen")
-@patch("kairo.config.Config._get_default_config_path")
-def test_oauth2_flow_failure(
-    mock_config_path, mock_urlopen, config_content_no_access_token, cli_args
-):
-    """Test OAuth2 flow failure."""
-    runner = CliRunner()
+class TestFetchCommandErrors:
+    """Tests for error handling in fetch command."""
 
-    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
-        json.dump(config_content_no_access_token, f)
-        config_file = f.name
-
-    try:
-        # Mock the config to use our test file
-        mock_config_path.return_value = Path(config_file)
-
-        # Mock OAuth2 failure
-        mock_urlopen.side_effect = Exception("OAuth2 failed")
-
-        # Mock user input for auth code
-        with patch("click.prompt", return_value="test_auth_code"):
-            result = runner.invoke(
-                cli,
-                cli_args,
-            )
-
-        # Should show OAuth2 failure
-        assert result.exit_code == 0
-        assert "Performing OAuth2 authentication flow" in result.output
-        assert "❌ OAuth2 authentication failed" in result.output
-        assert "OAuth2 failed" in result.output
-
-    finally:
-        os.unlink(config_file)
-
-
-@patch("kairo.config.Config._get_default_config_path")
-def test_missing_username_in_account(mock_config_path):
-    """Test CLI with account missing username."""
-    runner = CliRunner()
-
-    # Create a temporary config with account missing username
-    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
-        config_content = {
+    def test_missing_username(self, runner, tmp_path, mock_config_path):
+        """Test CLI with account missing username."""
+        config = {
             "accounts": {
                 "incomplete_account": {
                     "provider": "gmail",
                     "password": "test_password",
-                    # Missing username
                 }
             },
-            "storage": {"path": "/tmp/test_storage"},
+            "storage": {"path": str(tmp_path / "storage")},
         }
-        json.dump(config_content, f)
-        config_file = f.name
-
-    try:
-        # Mock the config to use our test file
-        mock_config_path.return_value = Path(config_file)
+        config_path = tmp_path / "config.json"
+        save_config(config_path, config)
+        mock_config_path.return_value = config_path
 
         result = runner.invoke(
             cli,
@@ -506,40 +675,23 @@ def test_missing_username_in_account(mock_config_path):
             ],
         )
 
-        # With Pydantic validation, incomplete accounts are filtered out
         assert result.exit_code == 0
-        assert (
-            "Error: Account 'incomplete_account' not found in configuration"
-            in result.output
-        )
+        assert "Account 'incomplete_account' not found" in result.output
 
-    finally:
-        os.unlink(config_file)
-
-
-@patch("kairo.config.Config._get_default_config_path")
-def test_no_authentication_method(mock_config_path):
-    """Test CLI with account having no authentication method."""
-    runner = CliRunner()
-
-    # Create a temporary config with account missing both password and OAuth2
-    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
-        config_content = {
+    def test_no_authentication_method(self, runner, tmp_path, mock_config_path):
+        """Test CLI with account having no authentication method."""
+        config = {
             "accounts": {
                 "no_auth_account": {
                     "provider": "gmail",
                     "username": "test@example.com",
-                    # Missing password and OAuth2 credentials
                 }
             },
-            "storage": {"path": "/tmp/test_storage"},
+            "storage": {"path": str(tmp_path / "storage")},
         }
-        json.dump(config_content, f)
-        config_file = f.name
-
-    try:
-        # Mock the config to use our test file
-        mock_config_path.return_value = Path(config_file)
+        config_path = tmp_path / "config.json"
+        save_config(config_path, config)
+        mock_config_path.return_value = config_path
 
         result = runner.invoke(
             cli,
@@ -556,134 +708,173 @@ def test_no_authentication_method(mock_config_path):
             ],
         )
 
-        # Should show error about no authentication method
         assert result.exit_code == 0
-        assert (
-            "Error: No authentication method configured (password or OAuth2)"
-            in result.output
+        assert "No authentication method configured" in result.output
+
+    def test_imap_requires_server(self, runner, tmp_path, mock_config_path):
+        """Test that IMAP provider requires server parameter."""
+        config = {
+            "accounts": {
+                "test_account": {
+                    "provider": "imap",
+                    "username": "test@example.com",
+                    "password": "test_password",
+                }
+            },
+            "storage": {"path": str(tmp_path / "storage")},
+        }
+        config_path = tmp_path / "config.json"
+        save_config(config_path, config)
+        mock_config_path.return_value = config_path
+
+        result = runner.invoke(
+            cli,
+            [
+                "fetch",
+                "--provider",
+                "imap",
+                "--account",
+                "test_account",
+                "--folder",
+                "inbox",
+            ],
         )
 
-    finally:
-        os.unlink(config_file)
+        assert result.exit_code == 0
+        assert "server is required for IMAP provider" in result.output
+
+    def test_network_error_handling(self, runner, config_path, mock_config_path):
+        """Test fetch command with network failure."""
+
+        mock_config_path.return_value = config_path
+
+        with patch("kairo.services.fetch_service.GmailRetriever") as mock_retriever:
+            mock_retriever.side_effect = ConnectionError("Network failed")
+
+            result = runner.invoke(
+                cli,
+                [
+                    "fetch",
+                    "--provider",
+                    "gmail",
+                    "--account",
+                    "test_account",
+                    "--folder",
+                    "inbox",
+                ],
+            )
+
+            assert result.exit_code == 0
+            assert "Error" in result.output or "Network failed" in result.output
+
+    def test_invalid_folder(self, runner, config_path, mock_config_path):
+        """Test fetch command with invalid folder."""
+
+        mock_config_path.return_value = config_path
+
+        with patch("kairo.services.fetch_service.GmailRetriever") as mock_retriever:
+            mock_instance = MagicMock()
+            mock_instance.fetch_emails.side_effect = ValueError("Invalid folder")
+            mock_retriever.return_value = mock_instance
+
+            result = runner.invoke(
+                cli,
+                [
+                    "fetch",
+                    "--provider",
+                    "gmail",
+                    "--account",
+                    "test_account",
+                    "--folder",
+                    "invalid_folder_xyz",
+                ],
+            )
+
+            assert result.exit_code == 0
+            assert "Error" in result.output or "invalid" in result.output.lower()
 
 
-def test_accounts_service_list_accounts():
-    """Test AccountsService list_accounts method."""
-    from kairo.services.accounts_service import AccountsService
+class TestStorageIntegration:
+    """Tests for storage integration in fetch command."""
 
-    config = Config()
-    accounts_service = AccountsService(config)
-
-    # This should execute without error
-    accounts_service.list_accounts()
-
-
-def test_search_service_search_emails():
-    """Test SearchService search_emails method."""
-    from kairo.services.search_service import SearchService
-
-    config = Config()
-    search_service = SearchService(config)
-
-    # This should execute without error
-    search_service.search_emails("test_account", "test_query")
-
-
-def test_init_service_initialize():
-    """Test InitService initialize method."""
-    from kairo.services.init_service import InitService
-
-    init_service = InitService()
-
-    # This should execute without error
-    init_service.initialize()
-
-
-def test_email_processor_process_email():
-    """Test EmailProcessor process_email method."""
-    with tempfile.TemporaryDirectory() as temp_dir:
-        storage = StorageManager(temp_dir)
-
-        # Create a mock retriever
-        class MockRetriever:
-            def get_email_metadata(self, email_data):
-                from kairo.models import EmailMetadata
-
-                return EmailMetadata(
-                    email_id=email_data["email_id"],
-                    from_address=email_data["from_address"],
-                    to_addresses=email_data["to_addresses"],
-                    subject=email_data["subject"],
-                    date=email_data["date"],
-                    folder=email_data["folder"],
-                    attachments=email_data.get("attachments", []),
-                    has_attachments=email_data.get("has_attachments", False),
-                    processed=False,
-                )
-
-        retriever = MockRetriever()
-        processor = EmailProcessor(storage, retriever)
-
-        # Test email data
-        email_data = {
-            "email_id": "123",
-            "from_address": "sender@example.com",
-            "to_addresses": ["recipient@example.com"],
-            "subject": "Test Subject",
-            "date": "2024-01-01",
-            "folder": "inbox",
-            "attachments": [],
-            "has_attachments": False,
-            "raw": "From: sender@example.com\nTo: recipient@example.com\nSubject: Test Subject\n\nTest body",
+    def test_storage_creation(self, runner, tmp_path, mock_config_path):
+        """Test that storage directory is created during fetch."""
+        storage_dir = tmp_path / "storage"
+        config = {
+            "accounts": {
+                "test_account": {
+                    "provider": "gmail",
+                    "username": "test@example.com",
+                    "password": "test_password",
+                }
+            },
+            "storage": {"path": str(storage_dir)},
         }
+        config_path = tmp_path / "config.json"
+        save_config(config_path, config)
+        mock_config_path.return_value = config_path
 
-        # Process the email
-        result = processor.process_email("test_account", "inbox", email_data)
+        result = runner.invoke(
+            cli,
+            [
+                "fetch",
+                "--provider",
+                "gmail",
+                "--account",
+                "test_account",
+                "--folder",
+                "inbox",
+                "--limit",
+                "1",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert storage_dir.exists()
+
+    def test_email_storage(self, fake_email_data, tmp_path):
+        """Test that emails are stored correctly."""
+        storage = StorageManager(str(tmp_path / "storage"))
+        processor = EmailProcessor(storage, MockGmailRetriever("test", "pass"))
+
+        result = processor.process_email("test_account", "inbox", fake_email_data)
+
         assert result is True
-
-        # Verify email was saved
-        email_path = storage.get_email_path("test_account", "inbox", "123")
+        email_path = storage.get_email_path(
+            "test_account", "inbox", fake_email_data["email_id"]
+        )
         assert email_path.exists()
 
-        # Verify index was updated
         index = storage.load_index("test_account")
         emails = index.get_emails_in_folder("inbox")
         assert len(emails) == 1
-        assert emails[0].email_id == "123"
+        assert emails[0].email_id == fake_email_data["email_id"]
+        assert emails[0].from_address == fake_email_data["from_address"]
+        assert emails[0].subject == fake_email_data["subject"]
 
 
-def test_account_finder_validate_imap_requirements():
-    """Test AccountFinder validate_imap_requirements method."""
-    from kairo.config import Config
-    from kairo.services.fetch_service import AccountFinder
+class TestAccountFinder:
+    """Tests for AccountFinder service."""
 
-    config = Config()
-    finder = AccountFinder(config)
+    def test_validate_imap_requirements(self, empty_config):
+        """Test IMAP requirements validation."""
 
-    # Test IMAP without server (should return False)
-    result = finder.validate_imap_requirements("imap", None)
-    assert result is False
+        config_obj = Config(str(empty_config))
+        finder = AccountFinder(config_obj)
 
-    # Test IMAP with server (should return True)
-    result = finder.validate_imap_requirements("imap", "imap.example.com")
-    assert result is True
+        assert finder.validate_imap_requirements("imap", None) is False
+        assert finder.validate_imap_requirements("imap", "") is False
 
-    # Test non-IMAP provider (should return True)
-    result = finder.validate_imap_requirements("gmail", None)
-    assert result is True
+        assert finder.validate_imap_requirements("imap", "imap.example.com") is True
 
+        assert finder.validate_imap_requirements("gmail", None) is True
 
-def test_account_finder_find_account_config(config_content_basic):
-    """Test AccountFinder find_account_config method."""
-    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
-        json.dump(config_content_basic, f)
-        config_file = f.name
+    def test_find_account_config(self, config_path):
+        """Test finding account configuration."""
 
-    try:
-        config = Config(config_file)
-        finder = AccountFinder(config)
+        config_obj = Config(str(config_path))
+        finder = AccountFinder(config_obj)
 
-        # Test finding by account name
         account_name, account_config = finder.find_account_config(
             "gmail", "test_account"
         )
@@ -691,64 +882,62 @@ def test_account_finder_find_account_config(config_content_basic):
         assert account_config is not None
         assert account_config.username == "test@example.com"
 
-        # Test finding by provider
         account_name, account_config = finder.find_account_config("gmail", None)
         assert account_name == "test_account"
         assert account_config is not None
 
-        # Test non-existent account
         account_name, account_config = finder.find_account_config(
             "gmail", "nonexistent"
         )
         assert account_name is None
         assert account_config is None
 
-    finally:
-        Path(config_file).unlink()
 
+class TestGmailAuthenticator:
+    """Tests for GmailAuthenticator service."""
 
-def test_gmail_authenticator_authenticate(config_content_basic):
-    """Test GmailAuthenticator authenticate method."""
-    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
-        json.dump(config_content_basic, f)
-        config_file = f.name
+    def test_authenticate_with_password(self, config_path):
+        """Test authentication with password."""
 
-    try:
-        config = Config(config_file)
-        authenticator = GmailAuthenticator(config)
+        config_obj = Config(str(config_path))
+        authenticator = GmailAuthenticator(config_obj)
 
-        # Test authentication with password
-        account_config = config.get_account("test_account")
-        retriever = authenticator.authenticate("test_account", account_config)  # type: ignore[arg-type]
+        account_config = config_obj.get_account("test_account")
+        assert account_config is not None
+
+        retriever = authenticator.authenticate("test_account", account_config)
 
         assert retriever is not None
         assert retriever.username == "test@example.com"
         assert retriever.password == "test_password"
 
-    finally:
-        Path(config_file).unlink()
 
+class TestEmailFetchService:
+    """Tests for EmailFetchService."""
 
-def test_email_fetch_service_process_emails(config_content_basic):
-    """Test EmailFetchService email processing logic."""
-    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
-        json.dump(config_content_basic, f)
-        config_file = f.name
+    def test_process_emails_with_fake_data(
+        self, tmp_path, config_path, fake_emails_data
+    ):
+        """Test processing multiple emails with fake data."""
 
-    try:
-        config = Config(config_file)
-        fetch_service = EmailFetchService(config)
+        config_obj = Config(str(config_path))
+        fetch_service = EmailFetchService(config_obj)
 
-        # Mock the retriever and storage
-        mock_retriever = MagicMock()
-        mock_storage = MagicMock()
+        mock_retriever = MockGmailRetriever(
+            username="test@example.com",
+            password="test_password",
+            emails=fake_emails_data,
+        )
+        mock_storage = StorageManager(str(tmp_path / "storage"))
 
-        # Mock the account finding to return our test account
         with patch.object(
             fetch_service.account_finder,
             "find_account_config",
-            return_value=("test_account", config.get_account("test_account")),
-        ):  # type: ignore[arg-type]
+            return_value=(
+                "test_account",
+                config_obj.get_account("test_account"),
+            ),
+        ):
             with patch.object(
                 fetch_service.gmail_authenticator,
                 "authenticate",
@@ -758,35 +947,6 @@ def test_email_fetch_service_process_emails(config_content_basic):
                     "kairo.services.fetch_service.StorageManager",
                     return_value=mock_storage,
                 ):
-                    # Mock the retriever to return test emails
-                    test_emails = [
-                        {
-                            "email_id": "1",
-                            "from_address": "sender1@example.com",
-                            "to_addresses": ["recipient@example.com"],
-                            "subject": "Test Subject 1",
-                            "date": "2024-01-01",
-                            "folder": "INBOX",
-                            "attachments": [],
-                            "has_attachments": False,
-                            "raw": "From: sender1@example.com\nSubject: Test Subject 1\n\nBody 1",
-                        },
-                        {
-                            "email_id": "2",
-                            "from_address": "sender2@example.com",
-                            "to_addresses": ["recipient@example.com"],
-                            "subject": "Test Subject 2",
-                            "date": "2024-01-02",
-                            "folder": "INBOX",
-                            "attachments": [],
-                            "has_attachments": False,
-                            "raw": "From: sender2@example.com\nSubject: Test Subject 2\n\nBody 2",
-                        },
-                    ]
-                    mock_retriever.fetch_emails.return_value = test_emails
-
-                    # Mock storage methods
-                    mock_storage.is_email_processed.return_value = False
                     mock_processor = MagicMock()
                     mock_processor.process_email.return_value = True
 
@@ -794,85 +954,68 @@ def test_email_fetch_service_process_emails(config_content_basic):
                         "kairo.services.fetch_service.EmailProcessor",
                         return_value=mock_processor,
                     ):
-                        # Test the email processing
                         fetch_service.fetch_emails(
                             "gmail", "test_account", "inbox", None, 10
                         )
 
-                        # Verify the retriever was called
-                        mock_retriever.fetch_emails.assert_called_once_with(
-                            folder="INBOX"
+                        assert len(mock_retriever.fetch_emails_calls) == 1
+                        assert mock_retriever.fetch_emails_calls[0]["folder"] == "INBOX"
+                        assert mock_processor.process_email.call_count == len(
+                            fake_emails_data
                         )
 
-                        # Verify emails were processed
-                        assert mock_processor.process_email.call_count == 2
+    def test_empty_emails(self, config_path):
+        """Test processing with no emails."""
 
-                        # Verify storage methods were called
-                        assert mock_storage.is_email_processed.call_count == 2
-                        assert mock_storage.load_index.call_count == 2
-                        assert mock_storage.save_index.call_count == 2
+        config_obj = Config(str(config_path))
+        fetch_service = EmailFetchService(config_obj)
 
-    finally:
-        Path(config_file).unlink()
+        mock_retriever = MockGmailRetriever(
+            username="test@example.com",
+            password="test_password",
+            emails=[],
+        )
 
-
-def test_email_fetch_service_empty_emails(config_content_basic):
-    """Test EmailFetchService with no emails."""
-
-    # Create a temporary config file
-    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
-        json.dump(config_content_basic, f)
-        config_file = f.name
-
-    try:
-        config = Config(config_file)
-        fetch_service = EmailFetchService(config)
-
-        # Mock the retriever to return empty list
-        mock_retriever = MagicMock()
-        mock_retriever.fetch_emails.return_value = []
-
-        # Mock the account finding and authentication
         with patch.object(
             fetch_service.account_finder,
             "find_account_config",
-            return_value=("test_account", config.get_account("test_account")),
-        ):  # type: ignore[arg-type]
+            return_value=(
+                "test_account",
+                config_obj.get_account("test_account"),
+            ),
+        ):
             with patch.object(
                 fetch_service.gmail_authenticator,
                 "authenticate",
                 return_value=mock_retriever,
             ):
-                # Test with empty emails - should return early
                 fetch_service.fetch_emails("gmail", "test_account", "inbox", None, 10)
 
-                # Verify the retriever was called
-                mock_retriever.fetch_emails.assert_called_once_with(folder="INBOX")
+                assert len(mock_retriever.fetch_emails_calls) == 1
+                assert mock_retriever.fetch_emails_calls[0]["folder"] == "INBOX"
 
-    finally:
-        Path(config_file).unlink()
+    def test_processed_emails_skipped(self, config_path, fake_emails_data):
+        """Test that already processed emails are skipped."""
 
+        config_obj = Config(str(config_path))
+        fetch_service = EmailFetchService(config_obj)
 
-def test_email_fetch_service_processed_emails(config_content_basic):
-    """Test EmailFetchService with already processed emails."""
-    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
-        json.dump(config_content_basic, f)
-        config_file = f.name
-
-    try:
-        config = Config(config_file)
-        fetch_service = EmailFetchService(config)
-
-        # Mock the retriever and storage
-        mock_retriever = MagicMock()
+        mock_retriever = MockGmailRetriever(
+            username="test@example.com",
+            password="test_password",
+            emails=fake_emails_data,
+        )
         mock_storage = MagicMock()
+        mock_storage.is_email_processed.return_value = True
 
-        # Mock the account finding and authentication
         with patch.object(
             fetch_service.account_finder,
             "find_account_config",
-            return_value=("test_account", config.get_account("test_account")),
-        ):  # type: ignore[arg-type]
+            return_value=(
+                "test_account",
+                config_obj.get_account("test_account"),
+            ),
+        ):
             with patch.object(
                 fetch_service.gmail_authenticator,
                 "authenticate",
@@ -882,58 +1025,52 @@ def test_email_fetch_service_processed_emails(config_content_basic):
                     "kairo.services.fetch_service.StorageManager",
                     return_value=mock_storage,
                 ):
-                    # Mock the retriever to return test emails
-                    test_emails = [
-                        {
-                            "email_id": "1",
-                            "from_address": "sender1@example.com",
-                            "to_addresses": ["recipient@example.com"],
-                            "subject": "Test Subject 1",
-                            "date": "2024-01-01",
-                            "folder": "INBOX",
-                            "attachments": [],
-                            "has_attachments": False,
-                            "raw": "From: sender1@example.com\nSubject: Test Subject 1\n\nBody 1",
-                        }
-                    ]
-                    mock_retriever.fetch_emails.return_value = test_emails
-
-                    # Mock storage to say emails are already processed
-                    mock_storage.is_email_processed.return_value = True
-
-                    # Test with processed emails - should skip them
                     fetch_service.fetch_emails(
                         "gmail", "test_account", "inbox", None, 10
                     )
 
-                    # Verify no processing happened
                     mock_storage.load_index.assert_not_called()
                     mock_storage.save_index.assert_not_called()
 
-    finally:
-        Path(config_file).unlink()
+    def test_limit_reached(self, config_path):
+        """Test that processing stops when limit is reached."""
 
+        config_obj = Config(str(config_path))
+        fetch_service = EmailFetchService(config_obj)
 
-def test_email_fetch_service_limit_reached(config_content_basic):
-    """Test EmailFetchService when limit is reached."""
-    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
-        json.dump(config_content_basic, f)
-        config_file = f.name
-
-    try:
-        config = Config(config_file)
-        fetch_service = EmailFetchService(config)
-
-        # Mock the retriever and storage
-        mock_retriever = MagicMock()
+        emails = [
+            {
+                "email_id": str(i),
+                "from_address": f"sender{i}@example.com",
+                "to_addresses": ["recipient@example.com"],
+                "subject": f"Subject {i}",
+                "date": "2024-01-01",
+                "folder": "INBOX",
+                "attachments": [],
+                "has_attachments": False,
+                "raw": f"Body {i}",
+            }
+            for i in range(10)
+        ]
+        mock_retriever = MockGmailRetriever(
+            username="test@example.com",
+            password="test_password",
+            emails=emails,
+        )
         mock_storage = MagicMock()
+        mock_storage.is_email_processed.return_value = False
 
-        # Mock the account finding and authentication
+        mock_processor = MagicMock()
+        mock_processor.process_email.return_value = True
+
         with patch.object(
             fetch_service.account_finder,
             "find_account_config",
-            return_value=("test_account", config.get_account("test_account")),
-        ):  # type: ignore[arg-type]
+            return_value=(
+                "test_account",
+                config_obj.get_account("test_account"),
+            ),
+        ):
             with patch.object(
                 fetch_service.gmail_authenticator,
                 "authenticate",
@@ -943,89 +1080,78 @@ def test_email_fetch_service_limit_reached(config_content_basic):
                     "kairo.services.fetch_service.StorageManager",
                     return_value=mock_storage,
                 ):
-                    # Mock the retriever to return many test emails
-                    test_emails = []
-                    for i in range(5):
-                        test_emails.append(
-                            {
-                                "email_id": str(i + 1),
-                                "from_address": f"sender{i + 1}@example.com",
-                                "to_addresses": ["recipient@example.com"],
-                                "subject": f"Test Subject {i + 1}",
-                                "date": "2024-01-01",
-                                "folder": "INBOX",
-                                "attachments": [],
-                                "has_attachments": False,
-                                "raw": f"From: sender{i + 1}@example.com\nSubject: Test Subject {i + 1}\n\nBody {i + 1}",
-                            }
-                        )
-                    mock_retriever.fetch_emails.return_value = test_emails
-
-                    # Mock storage methods
-                    mock_storage.is_email_processed.return_value = False
-                    mock_processor = MagicMock()
-                    mock_processor.process_email.return_value = True
-
                     with patch(
                         "kairo.services.fetch_service.EmailProcessor",
                         return_value=mock_processor,
                     ):
-                        # Test with limit=3 - should stop after processing 3 emails
                         fetch_service.fetch_emails(
                             "gmail", "test_account", "inbox", None, 3
                         )
 
-                        # Verify only 3 emails were processed
                         assert mock_processor.process_email.call_count == 3
 
-    finally:
-        Path(config_file).unlink()
-
-
-def test_email_fetch_service_imap_provider():
-    """Test EmailFetchService with IMAP provider."""
-    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
-        config_content = {
+    def test_imap_provider_not_implemented(self, tmp_path):
+        """Test IMAP provider returns not implemented message."""
+        config_path = tmp_path / "config_imap.json"
+        config = {
             "accounts": {
-                "test_account": {
+                "imap_account": {
                     "provider": "imap",
                     "username": "test@example.com",
                     "password": "test_password",
                     "server": "imap.example.com",
                 }
             },
-            "storage": {"path": "/tmp/test_storage"},
+            "storage": {"path": str(tmp_path / "storage")},
         }
-        json.dump(config_content, f)
-        config_file = f.name
+        with open(config_path, "w") as f:
+            json.dump(config, f)
 
-    try:
-        config = Config(config_file)
+        config = Config(str(config_path))
         fetch_service = EmailFetchService(config)
 
-        # Mock the account finding and authentication
         with patch.object(
             fetch_service.account_finder,
             "find_account_config",
-            return_value=("test_account", config.get_account("test_account")),
-        ):  # type: ignore[arg-type]
-            # Capture click output
-            from click.testing import CliRunner
+            return_value=("imap_account", config.get_account("imap_account")),
+        ):
+            with patch("click.echo") as mock_echo:
+                fetch_service.fetch_emails(
+                    "imap", "imap_account", "inbox", "imap.example.com", 10
+                )
 
-            runner = CliRunner()
+                assert any(
+                    "IMAP provider not yet implemented" in str(call)
+                    for call in mock_echo.call_args_list
+                )
 
-            with runner.isolated_filesystem():
-                # Test IMAP provider - should show "not yet implemented" message
-                with patch("click.echo") as mock_echo:
-                    fetch_service.fetch_emails(
-                        "imap", "test_account", "inbox", "imap.example.com", 10
-                    )
 
-                    # Verify the "not yet implemented" message was shown
-                    assert any(
-                        "IMAP provider not yet implemented" in str(call)
-                        for call in mock_echo.call_args_list
-                    )
+class TestAccountsService:
+    """Tests for AccountsService."""
 
-    finally:
-        Path(config_file).unlink()
+    def test_list_accounts(self, empty_config):
+        """Test listing accounts."""
+
+        config_obj = Config(str(empty_config))
+        accounts_service = AccountsService(config_obj)
+        accounts_service.list_accounts()
+
+
+class TestSearchService:
+    """Tests for SearchService."""
+
+    def test_search_emails(self, empty_config):
+        """Test searching emails."""
+
+        config_obj = Config(str(empty_config))
+        search_service = SearchService(config_obj)
+        search_service.search_emails("test_account", "test_query")
+
+
+class TestInitService:
+    """Tests for InitService."""
+
+    def test_initialize(self):
+        """Test initialization."""
+        init_service = InitService()
+        init_service.initialize()

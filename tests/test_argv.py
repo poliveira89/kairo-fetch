@@ -1,108 +1,86 @@
 """Test CLI argument propagation when executed as a script."""
 
+import json
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
+from typing import Any
+
+import pytest
 
 
-def get_temp_kairo_dir():
-    """Create a temporary kairo directory for testing."""
-    temp_dir = Path(tempfile.mkdtemp())
-    kairo_dir = temp_dir / ".kairo"
-    kairo_dir.mkdir(exist_ok=True)
+def make_config(
+    accounts: dict[str, Any] | None = None,
+    storage_path: str | None = None,
+) -> dict[str, Any]:
+    """Generate test configuration data.
+
+    Args:
+        accounts: Dictionary of email accounts, defaults to empty dict.
+        storage_path: Path for storage, defaults to /tmp/storage.
+
+    Returns:
+        Configuration dictionary.
+    """
+    return {
+        "accounts": accounts or {},
+        "storage": {"path": storage_path or "/tmp/storage"},
+    }
+
+
+@pytest.fixture
+def kairo_dir(tmp_path: Path) -> Path:
+    """Create a temporary kairo directory structure."""
+    kairo_dir = tmp_path / ".kairo"
+    kairo_dir.mkdir()
     storage_dir = kairo_dir / "storage"
-    storage_dir.mkdir(exist_ok=True)
-
-    # Create a minimal config file
+    storage_dir.mkdir()
+    config = make_config(storage_path=str(storage_dir))
     config_file = kairo_dir / "config.json"
-    config_file.write_text(
-        '{"accounts": {}, "storage": {"path": "' + str(storage_dir) + '"}}'
-    )
-
-    return temp_dir
+    config_file.write_text(json.dumps(config))
+    return tmp_path
 
 
-def test_cli_entry_point_propagates_arguments():
+def test_cli_entry_point_propagates_arguments(kairo_dir: Path) -> None:
     """Test that CLI entry point propagates system arguments correctly."""
-    temp_dir = get_temp_kairo_dir()
-
-    # Test execution as a module with -m flag
     result = subprocess.run(
         [sys.executable, "-m", "kairo.cli", "--help"],
         capture_output=True,
         text=True,
         cwd=Path(__file__).parent.parent,
-        env={"HOME": str(temp_dir), "PYTHONPATH": str(Path(__file__).parent.parent)},
+        env={"HOME": str(kairo_dir), "PYTHONPATH": str(Path(__file__).parent.parent)},
     )
 
-    # Cleanup
-    import shutil
-
-    shutil.rmtree(temp_dir, ignore_errors=True)
-
-    assert result.returncode == 0, f"CLI --help failed with: {result.stderr}"
-    assert (
-        "Usage:" in result.stdout
-    ), f"Expected 'Usage:' in output, got: {result.stdout}"
-    assert (
-        "Email Fetch" in result.stdout
-    ), f"Expected 'Email Fetch' in output, got: {result.stdout}"
-    assert (
-        "fetch" in result.stdout
-    ), f"Expected 'fetch' command in output, got: {result.stdout}"
+    assert result.returncode == 0
+    assert result.stderr == ""
+    assert all(x in result.stdout for x in ["Usage:", "Email Fetch", "fetch"])
 
 
-def test_cli_fetch_command_help():
+def test_cli_fetch_command_help(kairo_dir: Path) -> None:
     """Test that fetch command help works when executed as a module."""
-    temp_dir = get_temp_kairo_dir()
-
     result = subprocess.run(
         [sys.executable, "-m", "kairo.cli", "fetch", "--help"],
         capture_output=True,
         text=True,
         cwd=Path(__file__).parent.parent,
-        env={"HOME": str(temp_dir), "PYTHONPATH": str(Path(__file__).parent.parent)},
+        env={"HOME": str(kairo_dir), "PYTHONPATH": str(Path(__file__).parent.parent)},
     )
 
-    # Cleanup
-    import shutil
-
-    shutil.rmtree(temp_dir, ignore_errors=True)
-
-    assert result.returncode == 0, f"fetch --help failed with: {result.stderr}"
-    assert (
-        "Fetch emails" in result.stdout
-    ), f"Expected 'Fetch emails' in output, got: {result.stdout}"
-    assert (
-        "--provider" in result.stdout
-    ), f"Expected '--provider' in output, got: {result.stdout}"
+    assert result.returncode == 0
+    assert result.stderr == ""
+    assert all(x in result.stdout for x in ["Fetch emails", "--provider"])
 
 
-def test_cli_search_command_help():
+def test_cli_search_command_help(kairo_dir: Path) -> None:
     """Test that search command help works when executed as a module."""
-    temp_dir = get_temp_kairo_dir()
-
     result = subprocess.run(
         [sys.executable, "-m", "kairo.cli", "search", "--help"],
         capture_output=True,
         text=True,
         cwd=Path(__file__).parent.parent,
-        env={"HOME": str(temp_dir), "PYTHONPATH": str(Path(__file__).parent.parent)},
+        env={"HOME": str(kairo_dir), "PYTHONPATH": str(Path(__file__).parent.parent)},
     )
 
-    # Cleanup
-    import shutil
-
-    shutil.rmtree(temp_dir, ignore_errors=True)
-
-    assert result.returncode == 0, f"search --help failed with: {result.stderr}"
-    assert (
-        "Search emails" in result.stdout
-    ), f"Expected 'Search emails' in output, got: {result.stdout}"
-    assert (
-        "--account" in result.stdout
-    ), f"Expected '--account' in output, got: {result.stdout}"
-    assert (
-        "--query" in result.stdout
-    ), f"Expected '--query' in output, got: {result.stdout}"
+    assert result.returncode == 0
+    assert result.stderr == ""
+    assert all(x in result.stdout for x in ["Search emails", "--account", "--query"])

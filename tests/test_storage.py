@@ -38,7 +38,7 @@ def test_get_email_path():
         )
 
         assert email_path == expected_path
-        assert email_path.parent.exists()  # Parent directory should be created
+        assert email_path.parent.exists()
 
 
 def test_get_attachment_path():
@@ -75,7 +75,6 @@ def test_load_index_empty():
 
         index_manager = storage.load_index("test_account")
 
-        # Should return default empty index
         assert isinstance(index_manager, IndexManager)
         assert index_manager.to_dict() == {"folders": {}}
 
@@ -85,7 +84,6 @@ def test_load_index_existing():
     with tempfile.TemporaryDirectory() as temp_dir:
         storage = StorageManager(temp_dir)
 
-        # Create a test index file
         index_path = storage.get_index_path("test_account")
         test_index = {
             "folders": {
@@ -110,7 +108,6 @@ def test_load_index_existing():
         with open(index_path, "w") as f:
             json.dump(test_index, f)
 
-        # Load the index
         loaded_index_manager = storage.load_index("test_account")
 
         assert isinstance(loaded_index_manager, IndexManager)
@@ -126,7 +123,6 @@ def test_save_index():
     with tempfile.TemporaryDirectory() as temp_dir:
         storage = StorageManager(temp_dir)
 
-        # Create test index data
         test_index_dict = {
             "folders": {
                 "inbox": [
@@ -146,14 +142,11 @@ def test_save_index():
         }
         test_index_manager = IndexManager.load_from_dict(test_index_dict)
 
-        # Save the index
         storage.save_index("test_account", test_index_manager)
 
-        # Verify it was saved
         index_path = storage.get_index_path("test_account")
         assert index_path.exists()
 
-        # Load and verify
         import json
 
         with open(index_path, "r") as f:
@@ -167,7 +160,6 @@ def test_sanitize_filename():
     with tempfile.TemporaryDirectory() as temp_dir:
         storage = StorageManager(temp_dir)
 
-        # Test various problematic filenames
         test_cases = [
             ("normal_file.pdf", "normal_file.pdf"),
             ("file with spaces.txt", "file with spaces.txt"),  # Spaces are allowed
@@ -189,7 +181,6 @@ def test_storage_with_metadata():
     with tempfile.TemporaryDirectory() as temp_dir:
         storage = StorageManager(temp_dir)
 
-        # Create test metadata
         metadata = EmailMetadata(
             email_id="test123",
             from_address="sender@example.com",
@@ -202,7 +193,6 @@ def test_storage_with_metadata():
             processed=False,
         )
 
-        # Test saving and loading metadata
         test_index_dict = {"folders": {"inbox": [metadata.dict()]}}
         test_index_manager = IndexManager.load_from_dict(test_index_dict)
 
@@ -231,7 +221,6 @@ def test_is_email_processed():
     with tempfile.TemporaryDirectory() as temp_dir:
         storage = StorageManager(temp_dir)
 
-        # Create test index with processed and unprocessed emails
         test_index_dict = {
             "folders": {
                 "inbox": [
@@ -254,7 +243,6 @@ def test_is_email_processed():
 
         storage.save_index("test_account", test_index_manager)
 
-        # Test checking processed status
         assert storage.is_email_processed("test_account", "inbox", "123") is True
         assert storage.is_email_processed("test_account", "inbox", "456") is False
         assert storage.is_email_processed("test_account", "inbox", "999") is False
@@ -266,7 +254,6 @@ def test_email_exists():
     with tempfile.TemporaryDirectory() as temp_dir:
         storage = StorageManager(temp_dir)
 
-        # Create test index
         test_index_dict = {
             "folders": {
                 "inbox": [
@@ -281,7 +268,6 @@ def test_email_exists():
         test_index_manager = IndexManager.load_from_dict(test_index_dict)
         storage.save_index("test_account", test_index_manager)
 
-        # Test email existence
         assert test_index_manager.email_exists("inbox", "123") is True
         assert test_index_manager.email_exists("inbox", "999") is False
         assert test_index_manager.email_exists("sent", "123") is False
@@ -292,7 +278,6 @@ def test_email_storage_and_retrieval():
     with tempfile.TemporaryDirectory() as temp_dir:
         storage = StorageManager(temp_dir)
 
-        # Test email content
         email_content = """From: sender@example.com
 To: recipient@example.com
 Subject: Test Email
@@ -300,12 +285,10 @@ Subject: Test Email
 This is a test email body.
 """
 
-        # Store email
         email_path = storage.get_email_path("test_account", "inbox", "email123")
         with open(email_path, "w") as f:
             f.write(email_content)
 
-        # Retrieve email
         with open(email_path, "r") as f:
             retrieved_content = f.read()
 
@@ -318,17 +301,14 @@ def test_attachment_storage():
     with tempfile.TemporaryDirectory() as temp_dir:
         storage = StorageManager(temp_dir)
 
-        # Test attachment content
         attachment_content = b"This is a test attachment content"
 
-        # Store attachment
         attachment_path = storage.get_attachment_path(
             "test_account", "attach123", "document.pdf"
         )
         with open(attachment_path, "wb") as f:
             f.write(attachment_content)
 
-        # Retrieve attachment
         with open(attachment_path, "rb") as f:
             retrieved_content = f.read()
 
@@ -370,7 +350,6 @@ def test_index_manager_add_update():
     """Test IndexManager add method updates existing email."""
     index_manager = IndexManager.create_empty()
 
-    # Add initial email
     email_metadata: IndexEmailMetadata = IndexEmailMetadata(
         email_id="123",
         subject="Original Subject",
@@ -384,7 +363,6 @@ def test_index_manager_add_update():
     )
     index_manager.add("inbox", email_metadata)
 
-    # Update the same email
     updated_metadata: IndexEmailMetadata = IndexEmailMetadata(
         email_id="123",
         subject="Updated Subject",
@@ -398,7 +376,6 @@ def test_index_manager_add_update():
     )
     index_manager.add("inbox", updated_metadata)
 
-    # Verify update
     emails = index_manager.get_emails_in_folder("inbox")
     assert len(emails) == 1
     assert emails[0].subject == "Updated Subject"
@@ -409,7 +386,6 @@ def test_index_manager_mark_email_as_processed():
     """Test IndexManager mark_email_as_processed method."""
     index_manager = IndexManager.create_empty()
 
-    # Add email
     email_metadata: IndexEmailMetadata = IndexEmailMetadata(
         email_id="123",
         subject="Test Email",
@@ -423,11 +399,9 @@ def test_index_manager_mark_email_as_processed():
     )
     index_manager.add("inbox", email_metadata)
 
-    # Mark as processed
     result = index_manager.mark_email_as_processed("inbox", "123")
     assert result is True
 
-    # Verify it was marked as processed
     emails = index_manager.get_emails_in_folder("inbox")
     assert emails[0].processed is True
 
@@ -443,7 +417,6 @@ def test_index_manager_get_unprocessed_emails():
     """Test IndexManager get_unprocessed_emails method."""
     index_manager = IndexManager.create_empty()
 
-    # Add processed and unprocessed emails
     processed_email: IndexEmailMetadata = IndexEmailMetadata(
         email_id="123",
         subject="Processed Email",
@@ -469,7 +442,6 @@ def test_index_manager_get_unprocessed_emails():
     index_manager.add("inbox", processed_email)
     index_manager.add("inbox", unprocessed_email)
 
-    # Get unprocessed emails
     unprocessed = index_manager.get_unprocessed_emails("inbox")
     assert len(unprocessed) == 1
     assert unprocessed[0].email_id == "456"
@@ -480,7 +452,6 @@ def test_index_manager_ensure_folder_exists():
     """Test IndexManager ensure_folder_exists method."""
     index_manager = IndexManager.create_empty()
 
-    # Ensure folder exists
     index_manager.ensure_folder_exists("new_folder")
     assert "new_folder" in index_manager.to_dict()["folders"]
     assert index_manager.to_dict()["folders"]["new_folder"] == []
@@ -490,7 +461,6 @@ def test_index_manager_get_folders():
     """Test IndexManager get_folders method."""
     index_manager = IndexManager.create_empty()
 
-    # Add emails to different folders
     index_manager.add(
         "inbox",
         IndexEmailMetadata(
@@ -515,7 +485,6 @@ def test_index_manager_get_folder():
     """Test IndexManager get_folder method."""
     index_manager = IndexManager.create_empty()
 
-    # Get folder that doesn't exist (should create it)
     folder = index_manager.get_folder("new_folder")
     assert folder == []
     assert "new_folder" in index_manager.to_dict()["folders"]
@@ -533,9 +502,7 @@ def test_storage_manager_repr():
 
 def test_index_manager_load_from_dict_with_missing_folders():
     """Test IndexManager.load_from_dict with missing folders key."""
-    # Test the case where index_dict doesn't have 'folders' key
-    index_dict = {}  # Missing 'folders' key
+    index_dict = {}
     index_manager = IndexManager.load_from_dict(index_dict)
 
-    # Should create empty folders dict
     assert index_manager.to_dict() == {"folders": {}}

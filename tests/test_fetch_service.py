@@ -30,21 +30,32 @@ def account_config():
     )
 
 
-def test_gmail_authenticator_uses_oauth_config_token_url(mock_config, account_config):
+def test_gmail_authenticator_uses_oauth_config_token_url(mock_config):
     """Test that GmailAuthenticator uses token_url from config.oauth during OAuth exchange."""
 
     expected_url: str = mock_config.oauth.token_url
-
     authenticator = GmailAuthenticator(mock_config)
+
+    account_config = AccountConfig(
+        provider="gmail",
+        username="test@example.com",
+        client_id="test_client_id",
+        client_secret="test_client_secret",
+        password="test_password",
+        access_token=None,
+    )
+
+    mock_automator_instance = MagicMock()
+    mock_automator_instance.get_authorization_code.return_value = "test_auth_code"
 
     with (
         patch("kairo.services.fetch_service.click.echo"),
-        patch("kairo.services.fetch_service.click.prompt") as mock_prompt,
-        patch("urllib.request.Request") as mock_request,
-        patch("urllib.request.urlopen") as mock_urlopen,
+        patch("kairo.services.fetch_service.OAuthAutomator") as mock_automator_class,
+        patch("kairo.services.fetch_service.Request") as mock_request,
+        patch("kairo.services.fetch_service.urlopen") as mock_urlopen,
     ):
-        # Setup mocks
-        mock_prompt.return_value = "test_auth_code"
+        mock_automator_class.return_value = mock_automator_instance
+
         mock_response = MagicMock()
         mock_response.read.return_value = (
             b'{"access_token": "test_token", "refresh_token": "refresh_token"}'
@@ -53,7 +64,6 @@ def test_gmail_authenticator_uses_oauth_config_token_url(mock_config, account_co
         mock_request_instance = MagicMock()
         mock_request.return_value = mock_request_instance
 
-        # Track the URL and data passed to Request
         captured_url = None
         captured_data = None
 
@@ -65,14 +75,9 @@ def test_gmail_authenticator_uses_oauth_config_token_url(mock_config, account_co
 
         mock_request.side_effect = capture_request
 
-        # Call authenticate
         result = authenticator.authenticate("test_account", account_config)
 
-        # Verify the result is a GmailRetriever instance
-        assert result is not None
         assert isinstance(result, GmailRetriever)
-
-        # Verify the token URL from config.oauth was used
         assert captured_url == expected_url
         assert captured_data is not None
         assert b"code=test_auth_code" in captured_data
