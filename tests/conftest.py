@@ -1,5 +1,6 @@
 """Pytest fixtures and helpers for kairo-fetch tests."""
 
+import json
 from email.message import Message
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
@@ -224,3 +225,8 @@ def setup_mock_imap_for_fetch(
     if fetch_result:
         mock_instance.fetch.return_value = fetch_result
     return mock_instance
+
+
+def save_config(path: str, config: object):
+    with open(path, "w") as f:
+        json.dump(config, f)

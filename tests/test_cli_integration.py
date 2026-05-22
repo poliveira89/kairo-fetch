@@ -21,6 +21,7 @@ from kairo.services.fetch_service import (
 from kairo.services.init_service import InitService
 from kairo.services.search_service import SearchService
 from kairo.storage import StorageManager
+from tests.conftest import save_config
 
 fake = Faker()
 
@@ -230,8 +231,7 @@ def config_file_basic(tmp_path):
         },
         "storage": {"path": str(tmp_path / "storage")},
     }
-    with open(config_path, "w") as f:
-        json.dump(config, f)
+    save_config(config_path, config)
     return config_path
 
 
@@ -251,8 +251,7 @@ def config_file_oauth2(tmp_path):
         },
         "storage": {"path": str(tmp_path / "storage")},
     }
-    with open(config_path, "w") as f:
-        json.dump(config, f)
+    save_config(config_path, config)
     return config_path
 
 
@@ -283,8 +282,18 @@ def config_path(tmp_path):
         "storage": {"path": str(tmp_path / "storage")},
     }
     config_path = tmp_path / "config.json"
-    with open(config_path, "w") as f:
-        json.dump(config, f)
+    save_config(config_path, config)
+    return config_path
+
+
+@pytest.fixture
+def empty_config(tmp_path):
+    config = {
+        "accounts": {},
+        "storage": {"path": str(tmp_path / "storage")},
+    }
+    config_path = tmp_path / "config.json"
+    save_config(config_path, config)
     return config_path
 
 
@@ -354,8 +363,7 @@ class TestFetchCommandBasic:
             "storage": {"path": str(tmp_path / "storage")},
         }
         config_path = tmp_path / "config.json"
-        with open(config_path, "w") as f:
-            json.dump(config, f)
+        save_config(config_path, config)
         mock_config_path.return_value = config_path
 
         result = runner.invoke(
@@ -400,8 +408,7 @@ class TestFetchCommandBasic:
             config["accounts"]["test_account"].pop("server", None)
 
         config_path = tmp_path / "config.json"
-        with open(config_path, "w") as f:
-            json.dump(config, f)
+        save_config(config_path, config)
         mock_config_path.return_value = config_path
 
         result = runner.invoke(
@@ -428,8 +435,7 @@ class TestFetchCommandAccounts:
         """Test fetch command when no accounts are configured."""
         config = {"accounts": {}, "storage": {"path": str(tmp_path / "storage")}}
         config_path = tmp_path / "config.json"
-        with open(config_path, "w") as f:
-            json.dump(config, f)
+        save_config(config_path, config)
         mock_config_path.return_value = config_path
 
         result = runner.invoke(
@@ -453,8 +459,7 @@ class TestFetchCommandAccounts:
             "storage": {"path": str(tmp_path / "storage")},
         }
         config_path = tmp_path / "config.json"
-        with open(config_path, "w") as f:
-            json.dump(config, f)
+        save_config(config_path, config)
         mock_config_path.return_value = config_path
 
         result = runner.invoke(
@@ -491,8 +496,7 @@ class TestFetchCommandAccounts:
             "storage": {"path": str(tmp_path / "storage")},
         }
         config_path = tmp_path / "config.json"
-        with open(config_path, "w") as f:
-            json.dump(config, f)
+        save_config(config_path, config)
         mock_config_path.return_value = config_path
 
         result = runner.invoke(
@@ -525,8 +529,7 @@ class TestFetchCommandOAuth2:
             "storage": {"path": str(tmp_path / "storage")},
         }
         config_path = tmp_path / "config.json"
-        with open(config_path, "w") as f:
-            json.dump(config, f)
+        save_config(config_path, config)
         mock_config_path.return_value = config_path
 
         result = runner.invoke(
@@ -561,8 +564,7 @@ class TestFetchCommandOAuth2:
             "storage": {"path": str(tmp_path / "storage")},
         }
         config_path = tmp_path / "config.json"
-        with open(config_path, "w") as f:
-            json.dump(config, f)
+        save_config(config_path, config)
         mock_config_path.return_value = config_path
 
         mock_response = MagicMock()
@@ -612,8 +614,7 @@ class TestFetchCommandOAuth2:
             "storage": {"path": str(tmp_path / "storage")},
         }
         config_path = tmp_path / "config.json"
-        with open(config_path, "w") as f:
-            json.dump(config, f)
+        save_config(config_path, config)
         mock_config_path.return_value = config_path
 
         with patch("click.prompt", return_value="test_auth_code"):
@@ -656,8 +657,7 @@ class TestFetchCommandErrors:
             "storage": {"path": str(tmp_path / "storage")},
         }
         config_path = tmp_path / "config.json"
-        with open(config_path, "w") as f:
-            json.dump(config, f)
+        save_config(config_path, config)
         mock_config_path.return_value = config_path
 
         result = runner.invoke(
@@ -690,8 +690,7 @@ class TestFetchCommandErrors:
             "storage": {"path": str(tmp_path / "storage")},
         }
         config_path = tmp_path / "config.json"
-        with open(config_path, "w") as f:
-            json.dump(config, f)
+        save_config(config_path, config)
         mock_config_path.return_value = config_path
 
         result = runner.invoke(
@@ -725,8 +724,7 @@ class TestFetchCommandErrors:
             "storage": {"path": str(tmp_path / "storage")},
         }
         config_path = tmp_path / "config.json"
-        with open(config_path, "w") as f:
-            json.dump(config, f)
+        save_config(config_path, config)
         mock_config_path.return_value = config_path
 
         result = runner.invoke(
@@ -813,8 +811,7 @@ class TestStorageIntegration:
             "storage": {"path": str(storage_dir)},
         }
         config_path = tmp_path / "config.json"
-        with open(config_path, "w") as f:
-            json.dump(config, f)
+        save_config(config_path, config)
         mock_config_path.return_value = config_path
 
         result = runner.invoke(
@@ -859,17 +856,10 @@ class TestStorageIntegration:
 class TestAccountFinder:
     """Tests for AccountFinder service."""
 
-    def test_validate_imap_requirements(self, tmp_path):
+    def test_validate_imap_requirements(self, empty_config):
         """Test IMAP requirements validation."""
-        config = {
-            "accounts": {},
-            "storage": {"path": str(tmp_path / "storage")},
-        }
-        config_path = tmp_path / "config.json"
-        with open(config_path, "w") as f:
-            json.dump(config, f)
 
-        config_obj = Config(str(config_path))
+        config_obj = Config(str(empty_config))
         finder = AccountFinder(config_obj)
 
         assert finder.validate_imap_requirements("imap", None) is False
@@ -1139,17 +1129,10 @@ class TestEmailFetchService:
 class TestAccountsService:
     """Tests for AccountsService."""
 
-    def test_list_accounts(self, tmp_path):
+    def test_list_accounts(self, empty_config):
         """Test listing accounts."""
-        config = {
-            "accounts": {},
-            "storage": {"path": str(tmp_path / "storage")},
-        }
-        config_path = tmp_path / "config.json"
-        with open(config_path, "w") as f:
-            json.dump(config, f)
 
-        config_obj = Config(str(config_path))
+        config_obj = Config(str(empty_config))
         accounts_service = AccountsService(config_obj)
         accounts_service.list_accounts()
 
@@ -1157,17 +1140,10 @@ class TestAccountsService:
 class TestSearchService:
     """Tests for SearchService."""
 
-    def test_search_emails(self, tmp_path):
+    def test_search_emails(self, empty_config):
         """Test searching emails."""
-        config = {
-            "accounts": {},
-            "storage": {"path": str(tmp_path / "storage")},
-        }
-        config_path = tmp_path / "config.json"
-        with open(config_path, "w") as f:
-            json.dump(config, f)
 
-        config_obj = Config(str(config_path))
+        config_obj = Config(str(empty_config))
         search_service = SearchService(config_obj)
         search_service.search_emails("test_account", "test_query")
 
